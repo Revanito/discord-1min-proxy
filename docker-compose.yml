@@ -5,7 +5,10 @@ services:
     environment:
       ONE_MIN_API_KEY: ${ONE_MIN_API_KEY}
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
-      DEFAULT_MODEL: ${DEFAULT_MODEL:-gpt-4o-mini}
+      MODEL_EASY: ${MODEL_EASY:-grok-4-fast-non-reasoning}
+      MODEL_MEDIUM: ${MODEL_MEDIUM:-grok-4-fast-reasoning}
+      MODEL_HARD: ${MODEL_HARD:-grok-4.5}
+      MODEL_CLASSIFIER: ${MODEL_CLASSIFIER:-gpt-4o-mini}
     volumes:
       - proxy-data:/app/data
     ports:
@@ -21,6 +24,7 @@ services:
       PROXY_URL: http://proxy:8000
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
       ALLOWED_GUILD_IDS: ${ALLOWED_GUILD_IDS:-}
+      DEV_GUILD_ID: ${DEV_GUILD_ID:-}
 
 volumes:
   proxy-data:

@@ -1,7 +1,6 @@
-import re
-
 import discord
 import httpx
+from discord import app_commands
 
 from config import settings
 
@@ -9,23 +8,18 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 client = discord.Client(intents=intents)
-
-MENTION_RE = re.compile(r"<@!?\d+>")
-
-
-def _strip_mention(text: str) -> str:
-    return MENTION_RE.sub("", text).strip()
+tree = app_commands.CommandTree(client)
 
 
-async def _ask_proxy(thread_id: int, message: str) -> str:
+async def _ask_proxy(thread_id: int, message: str, web_search: bool = False) -> dict:
     async with httpx.AsyncClient(timeout=90.0) as http:
         resp = await http.post(
             f"{settings.proxy_url}/v1/chat",
             headers={"X-Proxy-Key": settings.proxy_shared_secret},
-            json={"thread_id": str(thread_id), "message": message},
+            json={"thread_id": str(thread_id), "message": message, "web_search": web_search},
         )
     resp.raise_for_status()
-    return resp.json()["reply"]
+    return resp.json()
 
 
 async def _send_reply(channel: discord.abc.Messageable, text: str) -> None:
@@ -33,45 +27,61 @@ async def _send_reply(channel: discord.abc.Messageable, text: str) -> None:
         await channel.send(text[i : i + 2000])
 
 
+def _guild_allowed(guild: discord.Guild | None) -> bool:
+    return not settings.allowed_guild_ids or (guild is not None and guild.id in settings.allowed_guild_ids)
+
+
 @client.event
 async def on_ready() -> None:
+    if settings.dev_guild_id:
+        guild = discord.Object(id=settings.dev_guild_id)
+        tree.copy_global_to(guild=guild)
+        await tree.sync(guild=guild)
+    else:
+        await tree.sync()
     print(f"Logged in as {client.user}")
+
+
+@tree.command(name="ask", description="Ask the AI a question")
+@app_commands.describe(question="What do you want to ask?", web_search="Let the AI search the web for up-to-date info")
+async def ask(interaction: discord.Interaction, question: str, web_search: bool = False) -> None:
+    if not _guild_allowed(interaction.guild):
+        await interaction.response.send_message("This bot isn't enabled in this server.", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    starter = await interaction.followup.send(f"**{question}**", wait=True)
+    thread = await starter.create_thread(name=question[:80] or "Question")
+
+    async with thread.typing():
+        try:
+            result = await _ask_proxy(thread.id, question, web_search=web_search)
+        except httpx.HTTPError as exc:
+            await thread.send(f"Sorry, I couldn't reach the AI proxy: {exc}")
+            return
+
+    await _send_reply(thread, result["reply"])
+    search_note = " · web search: on" if web_search else ""
+    await thread.send(f"-# tier: {result['tier']} · model: {result['model']}{search_note}")
 
 
 @client.event
 async def on_message(message: discord.Message) -> None:
     if message.author.bot:
         return
-    if settings.allowed_guild_ids and (
-        message.guild is None or message.guild.id not in settings.allowed_guild_ids
-    ):
+    if not _guild_allowed(message.guild):
+        return
+    if not (isinstance(message.channel, discord.Thread) and message.channel.owner_id == client.user.id):
         return
 
-    is_mention = client.user in message.mentions
-    is_continuation = (
-        isinstance(message.channel, discord.Thread)
-        and message.channel.owner_id == client.user.id
-    )
-    if not is_mention and not is_continuation:
-        return
-
-    prompt = _strip_mention(message.content) if is_mention else message.content
-    if not prompt:
-        return
-
-    if is_mention and not isinstance(message.channel, discord.Thread):
-        thread = await message.create_thread(name=prompt[:80] or "Chat")
-    else:
-        thread = message.channel
-
-    async with thread.typing():
+    async with message.channel.typing():
         try:
-            reply = await _ask_proxy(thread.id, prompt)
+            result = await _ask_proxy(message.channel.id, message.content)
         except httpx.HTTPError as exc:
-            await thread.send(f"Sorry, I couldn't reach the AI proxy: {exc}")
+            await message.channel.send(f"Sorry, I couldn't reach the AI proxy: {exc}")
             return
 
-    await _send_reply(thread, reply)
+    await _send_reply(message.channel, result["reply"])
 
 
 def main() -> None:

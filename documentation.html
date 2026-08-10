@@ -162,7 +162,8 @@
       <div class="card">
         <h3>What it does</h3>
         <ul>
-          <li>Lets any Discord server member chat with a 1min.ai-backed model</li>
+          <li>Lets any Discord server member ask a 1min.ai-backed model a question via <code>/ask</code></li>
+          <li>Auto-routes each question to an easy/medium/hard model tier based on a cheap classification call</li>
           <li>Keeps conversation context per Discord thread</li>
           <li>Keeps the real 1min.ai key off the Discord bot entirely</li>
         </ul>
@@ -189,21 +190,25 @@
     <div class="card">
       <pre>Discord server
    |
-   | @mention or reply in thread
+   | /ask question:... (or reply in the resulting thread)
    v
 Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY----> api.1min.ai
-   ^                                                        |
-   |                                                        v
+   ^                                                        |    ^
+   |                                                        |    | classify difficulty (MODEL_CLASSIFIER)
    +----------------- reply text <------------------- conversations.json
                                                         (thread_id -> conversationId)</pre>
     </div>
     <p>
       Both services run as separate Docker containers, managed by a single <code>docker-compose.yml</code>,
       on one Proxmox LXC. The bot never holds the 1min.ai API key; the proxy never holds the Discord token.
+      Every question is classified easy/medium/hard before being answered, and routed to a different model
+      per tier - see <a href="#proxy">section 5</a>.
     </p>
 
     <h2 id="onemin-api">3. 1min.ai API reference</h2>
-    <p>Confirmed from <a href="https://docs.1min.ai/docs/api/intro" target="_blank" rel="noopener">docs.1min.ai</a>:</p>
+    <p>Confirmed from <a href="https://docs.1min.ai/docs/api/intro" target="_blank" rel="noopener">docs.1min.ai</a>
+      and the <a href="https://docs.1min.ai/docs/api/chat-with-ai-api" target="_blank" rel="noopener">Chat with AI API page</a>
+      specifically:</p>
     <table>
       <thead>
         <tr>
@@ -289,9 +294,32 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
           <td>The user's text</td>
         </tr>
         <tr>
-          <td><code>model</code></td>
+          <td><code>web_search</code></td>
           <td>No</td>
-          <td>Falls back to <code>DEFAULT_MODEL</code></td>
+          <td>Defaults to <code>false</code>. When <code>true</code>, forwarded as 1min.ai's <code>promptObject.settings.webSearchSettings.webSearch</code> so the model grounds its answer with live web results.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Response fields:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>reply</code></td>
+          <td>The AI's answer text</td>
+        </tr>
+        <tr>
+          <td><code>tier</code></td>
+          <td><code>easy</code>, <code>medium</code>, or <code>hard</code> - the classification result</td>
+        </tr>
+        <tr>
+          <td><code>model</code></td>
+          <td>Which model identifier actually answered the question</td>
         </tr>
       </tbody>
     </table>
@@ -300,9 +328,15 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     <ol>
       <li>Look up <code>thread_id</code> in <code>conversations.py</code>.</li>
       <li>If not found, call 1min.ai's <code>POST /api/conversations</code> to create one and store the id.</li>
-      <li>Call <code>POST /api/chat-with-ai</code> with that <code>conversationId</code> and the prompt.</li>
-      <li>Return <code>{"reply": "..."}</code>.</li>
+      <li>Call <code>onemin_client.classify_difficulty()</code>, which sends the question to <code>MODEL_CLASSIFIER</code> with a fixed prompt asking for exactly one word - <code>easy</code>, <code>medium</code>, or <code>hard</code>. Defaults to <code>medium</code> if the response doesn't clearly say one of the three.</li>
+      <li>Map the tier to <code>MODEL_EASY</code> / <code>MODEL_MEDIUM</code> / <code>MODEL_HARD</code>.</li>
+      <li>Call <code>POST /api/chat-with-ai</code> with that model, the <code>conversationId</code>, and the prompt.</li>
+      <li>Return <code>{"reply": "...", "tier": "...", "model": "..."}</code>.</li>
     </ol>
+    <div class="note">
+      The classification call is stateless (no <code>conversationId</code>) and uses a cheap/fast model, so it
+      adds one extra lightweight request per question rather than materially slowing things down.
+    </div>
     <div class="warning">
       Errors from 1min.ai (timeout, non-2xx, missing <code>resultObject</code>) are caught in
       <code>onemin_client.py</code> and re-raised as <code>HTTPException(502, ...)</code>, so the bot
@@ -310,23 +344,38 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     </div>
 
     <h2 id="bot">6. Discord bot</h2>
-    <p>Uses <code>discord.py</code> with only the <code>message_content</code> and default intents.</p>
+    <p>Uses <code>discord.py</code> with the <code>message_content</code> intent and an <code>app_commands.CommandTree</code> for slash commands.</p>
     <ul class="checklist">
-      <li>@mention the bot in a normal text channel &rarr; it creates a thread off that message and treats the mention text as the first prompt.</li>
-      <li>Any further message inside a thread the bot owns (<code>thread.owner_id == client.user.id</code>) is treated as a continuation - no re-mention needed.</li>
+      <li><code>/ask question:&lt;text&gt; web_search:&lt;True/False&gt;</code> &rarr; the bot posts the question, creates a thread off that message, and answers inside it. <code>web_search</code> is an optional boolean option (renders as a True/False toggle in Discord's slash command UI), defaulting to off.</li>
+      <li>Any further message inside a thread the bot owns (<code>thread.owner_id == client.user.id</code>) is treated as a continuation - no need to <code>/ask</code> again. These continuation messages always answer with web search off, since there's no toggle available on a plain message.</li>
       <li>Shows a typing indicator while waiting on the proxy call.</li>
       <li>Splits replies over 2000 characters into multiple messages (Discord's hard limit).</li>
+      <li>Posts a small subtext line under each answer showing the tier and model used - useful for demoing the routing logic.</li>
       <li>Optional <code>ALLOWED_GUILD_IDS</code> env var restricts which servers the bot responds in.</li>
+      <li>Optional <code>DEV_GUILD_ID</code> syncs the slash command to one test server instantly, instead of a global sync that can take up to ~1 hour to propagate.</li>
     </ul>
 
     <h2 id="configuration">7. Configuration (.env)</h2>
     <p>Copy <code>.env.example</code> to <code>.env</code> and fill in:</p>
     <pre>ONE_MIN_API_KEY=your_1min_ai_api_key
 PROXY_SHARED_SECRET=choose_a_long_random_string
-DEFAULT_MODEL=gpt-4o-mini
+
+MODEL_EASY=grok-4-fast-non-reasoning
+MODEL_MEDIUM=grok-4-fast-reasoning
+MODEL_HARD=grok-4.5
+MODEL_CLASSIFIER=gpt-4o-mini
 
 DISCORD_BOT_TOKEN=your_discord_bot_token
-ALLOWED_GUILD_IDS=</pre>
+ALLOWED_GUILD_IDS=
+DEV_GUILD_ID=</pre>
+    <div class="note">
+      Easy/medium favor xAI's fast models (no/light reasoning, quick and conversational) since users tend to
+      want fast answers over long "thinking" delays; hard uses xAI's flagship for questions that need real
+      reasoning. The full list of every model identifier the API accepts, parsed from
+      <a href="https://docs.1min.ai/docs/api/chat-with-ai-api" target="_blank" rel="noopener">docs.1min.ai's Chat with AI API page</a>
+      (which 1min.ai updates as new models release - worth re-checking periodically), is kept in
+      <code>MODELS.md</code> at the repo root.
+    </div>
     <div class="danger">
       Never commit the real <code>.env</code> file - it holds both the 1min.ai key and the Discord token.
       <code>.gitignore</code> already excludes it.
@@ -374,8 +423,10 @@ docker compose logs -f</pre>
         returns a JSON reply from 1min.ai.
       </li>
       <li>Same request without <code>X-Proxy-Key</code> returns <code>401</code>.</li>
-      <li>In Discord, @mention the bot in a channel &rarr; it creates a thread and replies.</li>
-      <li>Reply inside that thread without mentioning &rarr; bot replies with context retained (ask something that depends on the prior message).</li>
+      <li>Try questions of clearly different difficulty (e.g. "hi" vs. a multi-step reasoning question) and confirm the subtext line under each reply shows a different tier/model.</li>
+      <li>In Discord, run <code>/ask question:...</code> &rarr; the bot creates a thread and replies.</li>
+      <li>Run <code>/ask question:... web_search:True</code> with a question about something recent (e.g. "what happened in the news today?") &rarr; confirm the answer reflects current info rather than a knowledge cutoff.</li>
+      <li>Reply inside that thread without using <code>/ask</code> again &rarr; bot replies with context retained (ask something that depends on the prior message).</li>
       <li>Ask for a long reply (&gt;2000 chars) &rarr; confirm the bot splits it into multiple messages.</li>
     </ol>
 
@@ -405,8 +456,8 @@ docker compose logs -f</pre>
     <ul class="checklist">
       <li>Streaming replies (SSE from 1min.ai) edited progressively into the Discord message.</li>
       <li>Swap the proxy's backend for a self-hosted assistant once one exists, without changing the bot.</li>
-      <li>Slash command (<code>/ask</code>) for quick one-off questions outside of threads.</li>
-      <li>Per-user or per-guild model selection instead of a single <code>DEFAULT_MODEL</code>.</li>
+      <li>Let the classifier tier be manually overridden with a second <code>/ask</code> option, for cases where the auto-classification guesses wrong.</li>
+      <li>Per-user or per-guild default tier/model instead of one fixed set of three.</li>
     </ul>
   </div>
 </body>
