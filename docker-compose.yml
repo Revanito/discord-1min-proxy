@@ -1,3 +1,4 @@
+# Fill out the .env file for variables
 services:
   proxy:
     build: ./proxy
