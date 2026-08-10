@@ -1,0 +1,26 @@
+services:
+  proxy:
+    build: ./proxy
+    restart: unless-stopped
+    environment:
+      ONE_MIN_API_KEY: ${ONE_MIN_API_KEY}
+      PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-gpt-4o-mini}
+    volumes:
+      - proxy-data:/app/data
+    ports:
+      - "8000:8000"
+
+  bot:
+    build: ./bot
+    restart: unless-stopped
+    depends_on:
+      - proxy
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      PROXY_URL: http://proxy:8000
+      PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
+      ALLOWED_GUILD_IDS: ${ALLOWED_GUILD_IDS:-}
+
+volumes:
+  proxy-data:

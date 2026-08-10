@@ -1,0 +1,4 @@
+.env
+proxy/data/
+__pycache__/
+*.pyc
