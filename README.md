@@ -2,7 +2,7 @@
 
 A self-hosted Discord bot that gives a Discord server access to [1min.ai](https://1min.ai) (a multi-model AI
 subscription — GPT, Claude, Gemini, etc. under one API), through a small FastAPI proxy that holds the API key
-server-side and tracks conversation context per Discord thread.
+server-side.
 
 The bot never sees the 1min.ai API key; the proxy never sees the Discord token. They only share a secret
 header to authenticate to each other.
@@ -16,15 +16,15 @@ header to authenticate to each other.
 
 ## What it does
 
-- `/ask question:<text> web_search:<True/False>` → the bot opens a thread off its reply and answers using a
-  1min.ai model; `web_search` is optional (defaults to off) and lets the model ground its answer with live
-  web results
-- Reply inside that thread (no need to `/ask` again) → conversation context is kept, mapped to that thread
-  via 1min.ai's own conversation id (these follow-up messages always use `web_search:false` — only the
-  initial `/ask` exposes the toggle)
+- `/ask question:<text> web_search:<True/False>` → the bot replies directly in the channel (shown as a reply
+  to the `/ask` invocation) with the question and the answer; `web_search` is optional (defaults to off) and
+  lets the model ground its answer with live web results
+- Each `/ask` is single-shot and independent — there's no follow-up/multi-turn memory between questions
 - Each question is auto-classified as **easy / medium / hard** (via a cheap model call) and routed to a
   different model per tier — fast xAI models for easy/medium, xAI's flagship for hard questions that
   actually need reasoning
+- The reply shows the question in bold, the answer, and a small `-#` subtext footer with the tier and model
+  used
 - Long replies (>2000 chars) are split across multiple Discord messages
 - Optional `ALLOWED_GUILD_IDS` env var restricts which Discord servers the bot responds in
 
@@ -62,9 +62,8 @@ docker compose logs -f
 [docs.1min.ai/docs/api/chat-with-ai-api](https://docs.1min.ai/docs/api/chat-with-ai-api).</sub>
 
 Discord bot setup notes:
-- Enable the **Message Content** privileged intent for the bot in the Developer Portal (Bot tab).
-- Invite the bot with at least the `Send Messages`, `Create Public Threads`, `Read Message History`, and
-  `Use Application Commands` permissions.
+- Invite the bot with at least the `Send Messages` and `Use Application Commands` permissions.
+- No privileged intents are required (the bot doesn't read message content).
 
 ## Stopping / updating
 
@@ -73,5 +72,6 @@ docker compose down          # stop
 git pull && docker compose up -d --build   # update to latest code
 ```
 
-Conversation history (thread ↔ 1min.ai conversation id mapping) persists in a Docker volume, so it survives
-restarts and rebuilds.
+The proxy still creates a fresh 1min.ai conversation per `/ask` call (keyed by the Discord interaction id) and
+persists that mapping in a Docker volume — this is just bookkeeping for the single-shot request, not
+multi-turn memory.
