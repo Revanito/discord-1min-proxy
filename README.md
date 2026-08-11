@@ -28,6 +28,8 @@ header to authenticate to each other.
 - Long replies (>2000 chars) are split across multiple Discord messages
 - Optional `ALLOWED_GUILD_IDS` env var restricts which Discord servers the bot responds in
 
+![Example /ask reply](docs/ask-example.png)
+
 See `documentation.html` for the full architecture, the 1min.ai API reference used, and a Proxmox LXC
 deployment guide. See `MODELS.md` for the full list of 1min.ai model identifiers, parsed from
 [1min.ai's Chat with AI API docs](https://docs.1min.ai/docs/api/chat-with-ai-api) — worth re-checking that
