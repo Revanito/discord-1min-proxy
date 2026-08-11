@@ -45,13 +45,20 @@ async def on_ready() -> None:
 @tree.command(name="ask", description="Ask the AI a question")
 @app_commands.describe(question="What do you want to ask?", web_search="Let the AI search the web for up-to-date info")
 async def ask(interaction: discord.Interaction, question: str, web_search: bool = False) -> None:
+    age = discord.utils.utcnow() - interaction.created_at
+    print(f"[ask] interaction age at handler entry: {age.total_seconds():.3f}s")
+
     if not _guild_allowed(interaction.guild):
         await interaction.response.send_message("This bot isn't enabled in this server.", ephemeral=True)
         return
 
+    defer_start = discord.utils.utcnow()
     await interaction.response.defer()
+    print(f"[ask] defer() took {(discord.utils.utcnow() - defer_start).total_seconds():.3f}s")
     starter = await interaction.followup.send(f"**{question}**", wait=True)
-    thread = await starter.create_thread(name=question[:80] or "Question")
+    thread = await interaction.channel.create_thread(
+        name=question[:80] or "Question", message=starter
+)
 
     async with thread.typing():
         try:
