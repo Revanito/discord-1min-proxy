@@ -38,7 +38,7 @@ page occasionally, since 1min.ai adds new models regularly.
 ## Clone and run
 
 ```bash
-git clone <this-repo-url> discord-1min-proxy
+git clone https://github.com/Revanito/discord-1min-proxy discord-1min-proxy
 cd discord-1min-proxy
 cp .env.example .env
 nano .env   # fill in the values below
