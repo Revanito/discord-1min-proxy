@@ -15,9 +15,10 @@ def _headers() -> dict[str, str]:
 
 async def create_conversation(title: str) -> str:
     url = f"{settings.one_min_base_url}/api/conversations"
+    body = {"type": "UNIFY_CHAT_WITH_AI", "title": title, "model": settings.model_medium}
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         try:
-            resp = await client.post(url, headers=_headers(), json={"title": title})
+            resp = await client.post(url, headers=_headers(), json=body)
             resp.raise_for_status()
         except httpx.HTTPError as exc:
             raise HTTPException(502, f"1min.ai conversation creation failed: {exc}") from exc
