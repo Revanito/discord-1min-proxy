@@ -51,14 +51,14 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
         await interaction.followup.send(f"Sorry, I couldn't reach the AI proxy: {exc}")
         return
 
-    reply = f"**{question}**\n{result['reply']}"
-    chunks = [reply[i : i + 2000] for i in range(0, len(reply), 2000)]
+    search_note = " · web search: on" if web_search else ""
+    footer = f"-# tier: {result['tier']} · model: {result['model']}{search_note}"
+    full = f"**{question}**\n{result['reply']}\n{footer}"
+
+    chunks = [full[i : i + 2000] for i in range(0, len(full), 2000)]
     await interaction.followup.send(chunks[0])
     for chunk in chunks[1:]:
         await interaction.channel.send(chunk)
-
-    search_note = " · web search: on" if web_search else ""
-    await interaction.channel.send(f"-# tier: {result['tier']} · model: {result['model']}{search_note}")
 
 
 def main() -> None:
