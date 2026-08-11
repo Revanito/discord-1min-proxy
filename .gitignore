@@ -2,4 +2,3 @@
 proxy/data/
 __pycache__/
 *.pyc
-documentation.html
