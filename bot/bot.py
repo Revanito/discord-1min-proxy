@@ -36,6 +36,21 @@ async def on_ready() -> None:
     print(f"Logged in as {client.user}")
 
 
+@tree.error
+async def on_tree_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+    cause = error.__cause__ or error
+    age = (discord.utils.utcnow() - interaction.created_at).total_seconds()
+    print(
+        f"[tree error] user={interaction.user} command={interaction.command.name if interaction.command else '?'} "
+        f"interaction age={age:.3f}s gateway latency={client.latency:.3f}s error={cause!r}"
+    )
+    if not interaction.response.is_done():
+        try:
+            await interaction.response.send_message("Something went wrong, please try again.", ephemeral=True)
+        except discord.HTTPException:
+            pass
+
+
 @tree.command(name="ask", description="Ask the AI a question")
 @app_commands.describe(question="What do you want to ask?", web_search="Let the AI search the web for up-to-date info")
 async def ask(interaction: discord.Interaction, question: str, web_search: bool = False) -> None:
@@ -43,7 +58,15 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
         await interaction.response.send_message("This bot isn't enabled in this server.", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    try:
+        await interaction.response.defer()
+    except discord.HTTPException as exc:
+        age = (discord.utils.utcnow() - interaction.created_at).total_seconds()
+        print(
+            f"[ask] defer() failed for {interaction.user}: {exc!r} "
+            f"(interaction age {age:.3f}s, gateway latency {client.latency:.3f}s)"
+        )
+        raise
 
     try:
         result = await _ask_proxy(interaction.id, question, web_search=web_search)
