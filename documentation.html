@@ -261,7 +261,7 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     <div class="warning">
       The <code>model</code> field on conversation creation isn't optional even though it's not obvious from
       a quick skim of the docs - <code>onemin_client.create_conversation()</code> sends
-      <code>MODEL_MEDIUM</code> as a placeholder there, since the actual per-message model is chosen
+      <code>MODEL_GENERAL_MEDIUM</code> as a placeholder there, since the actual per-message model is chosen
       separately for each <code>chat-with-ai</code> call. Sending just <code>{"title": ...}</code> passes the
       request but 1min.ai rejects it with a 400, which the proxy re-raises as a <code>502</code> - a
       confusing failure mode if you don't know to check the proxy's own request body.
@@ -334,8 +334,12 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
           <td>The AI's answer text</td>
         </tr>
         <tr>
+          <td><code>category</code></td>
+          <td><code>code</code>, <code>specific</code>, or <code>general</code> - which provider bucket the question was routed to</td>
+        </tr>
+        <tr>
           <td><code>tier</code></td>
-          <td><code>easy</code>, <code>medium</code>, or <code>hard</code> - the classification result</td>
+          <td><code>easy</code>, <code>medium</code>, or <code>hard</code> - the difficulty classification result</td>
         </tr>
         <tr>
           <td><code>model</code></td>
@@ -350,14 +354,20 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
       <li>If not found, call 1min.ai's <code>POST /api/conversations</code> (with <code>type</code>,
         <code>title</code>, and a placeholder <code>model</code> - see <a href="#onemin-api">section 3</a>)
         to create one and store the id.</li>
-      <li>Call <code>onemin_client.classify_difficulty()</code>, which sends the question to <code>MODEL_CLASSIFIER</code> with a fixed prompt asking for exactly one word - <code>easy</code>, <code>medium</code>, or <code>hard</code>. Defaults to <code>medium</code> if the response doesn't clearly say one of the three.</li>
-      <li>Map the tier to <code>MODEL_EASY</code> / <code>MODEL_MEDIUM</code> / <code>MODEL_HARD</code>.</li>
+      <li>Call <code>onemin_client.classify()</code>, which sends the question to <code>MODEL_CLASSIFIER</code>
+        with a fixed prompt asking for two comma-separated words: a category
+        (<code>code</code> / <code>specific</code> / <code>general</code>) and a difficulty
+        (<code>easy</code> / <code>medium</code> / <code>hard</code>). Defaults to <code>general</code> /
+        <code>medium</code> if the response doesn't clearly contain one of each.</li>
+      <li>Look up <code>MODEL_&lt;CATEGORY&gt;_&lt;TIER&gt;</code> in the 3x3 model matrix in <code>main.py</code>
+        (e.g. category <code>code</code> + tier <code>hard</code> -> <code>MODEL_CODE_HARD</code>).</li>
       <li>Call <code>POST /api/chat-with-ai</code> with that model, the <code>conversationId</code>, and the prompt.</li>
-      <li>Return <code>{"reply": "...", "tier": "...", "model": "..."}</code>.</li>
+      <li>Return <code>{"reply": "...", "category": "...", "tier": "...", "model": "..."}</code>.</li>
     </ol>
     <div class="note">
-      The classification call is stateless (no <code>conversationId</code>) and uses a cheap/fast model, so it
-      adds one extra lightweight request per question rather than materially slowing things down.
+      The classification call is stateless (no <code>conversationId</code>) and uses a cheap/fast model, and
+      returns both category and difficulty in one round trip - so it adds one extra lightweight request per
+      question rather than materially slowing things down.
     </div>
     <div class="warning">
       Errors from 1min.ai (timeout, non-2xx, missing <code>resultObject</code>) are caught in
@@ -375,7 +385,7 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
         "used /ask ..."). <code>web_search</code> is an optional boolean option (renders as a True/False
         toggle in Discord's slash command UI), defaulting to off.</li>
       <li>The reply is a single message: the question in bold, then the answer, then a small
-        <code>-#</code> subtext footer with the tier and model used.</li>
+        <code>-#</code> subtext footer with the category, tier, and model used.</li>
       <li>Each <code>/ask</code> is independent - there's no thread, and no memory carried between
         questions. See <a href="#future">section 12</a> for reintroducing multi-turn follow-ups.</li>
       <li>Splits replies over 2000 characters into multiple messages (Discord's hard limit).</li>
@@ -392,21 +402,32 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     <pre>ONE_MIN_API_KEY=your_1min_ai_api_key
 PROXY_SHARED_SECRET=choose_a_long_random_string
 
-MODEL_EASY=grok-4-fast-non-reasoning
-MODEL_MEDIUM=grok-4-fast-reasoning
-MODEL_HARD=grok-4.5
+MODEL_CODE_EASY=claude-haiku-4-5-20251001
+MODEL_CODE_MEDIUM=claude-sonnet-4-6
+MODEL_CODE_HARD=claude-opus-4-6
+
+MODEL_GENERAL_EASY=grok-4-fast-non-reasoning
+MODEL_GENERAL_MEDIUM=grok-4-fast-reasoning
+MODEL_GENERAL_HARD=grok-4.5
+
+MODEL_SPECIFIC_EASY=gpt-5-mini
+MODEL_SPECIFIC_MEDIUM=gpt-5.4-mini
+MODEL_SPECIFIC_HARD=gpt-5.2
+
 MODEL_CLASSIFIER=gpt-4o-mini
 
 DISCORD_BOT_TOKEN=your_discord_bot_token
 ALLOWED_GUILD_IDS=
 DEV_GUILD_ID=</pre>
     <div class="note">
-      Easy/medium favor xAI's fast models (no/light reasoning, quick and conversational) since users tend to
-      want fast answers over long "thinking" delays; hard uses xAI's flagship for questions that need real
-      reasoning. The full list of every model identifier the API accepts, parsed from
+      Category picks the provider - <code>code</code> (programming/IT) goes to Anthropic, <code>specific</code>
+      (factual/knowledge questions) goes to OpenAI, and <code>general</code> (casual/creative) goes to xAI,
+      since Grok reads more conversational and users tend to want fast answers over long "thinking" delays for
+      chit-chat. Tier then picks how much reasoning to spend within that provider. Deliberately avoids each
+      provider's priciest flagship to keep 1min.ai credit usage down - see <code>MODELS.md</code> at the repo
+      root for the full reasoning and the complete list of every model identifier the API accepts, parsed from
       <a href="https://docs.1min.ai/docs/api/chat-with-ai-api" target="_blank" rel="noopener">docs.1min.ai's Chat with AI API page</a>
-      (which 1min.ai updates as new models release - worth re-checking periodically), is kept in
-      <code>MODELS.md</code> at the repo root.
+      (which 1min.ai updates as new models release - worth re-checking periodically).
     </div>
     <div class="danger">
       Never commit the real <code>.env</code> file - it holds both the 1min.ai key and the Discord token.

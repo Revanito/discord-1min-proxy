@@ -75,7 +75,7 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
         return
 
     search_note = " · web search: on" if web_search else ""
-    footer = f"-# tier: {result['tier']} · model: {result['model']}{search_note}"
+    footer = f"-# category: {result['category']} · tier: {result['tier']} · model: {result['model']}{search_note}"
     full = f"**{question}**\n{result['reply']}\n{footer}"
 
     chunks = [full[i : i + 2000] for i in range(0, len(full), 2000)]

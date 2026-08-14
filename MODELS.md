@@ -30,13 +30,13 @@ exact strings are on hand without needing to load that page's dynamic model list
 ## Anthropic
 
 - `claude-sonnet-5` - Claude 5 Sonnet
-- `claude-sonnet-4-6` - Claude 4.6 Sonnet
+- `claude-sonnet-4-6` - Claude 4.6 Sonnet **(used as `MODEL_CODE_MEDIUM`)**
 - `claude-sonnet-4-5-20250929` - Claude 4.5 Sonnet
 - `claude-opus-4-8` - Claude 4.8 Opus
 - `claude-opus-4-7` - Claude 4.7 Opus
-- `claude-opus-4-6` - Claude 4.6 Opus
+- `claude-opus-4-6` - Claude 4.6 Opus **(used as `MODEL_CODE_HARD`)**
 - `claude-opus-4-5-20251101` - Claude 4.5 Opus
-- `claude-haiku-4-5-20251001` - Claude 4.5 Haiku
+- `claude-haiku-4-5-20251001` - Claude 4.5 Haiku **(used as `MODEL_CODE_EASY`)**
 - `claude-fable-5` - Claude 5 Fable
 
 ## Cohere
@@ -78,13 +78,13 @@ exact strings are on hand without needing to load that page's dynamic model list
 - `gpt-5.5` - GPT-5.5
 - `gpt-5.4-pro` - GPT-5.4 Pro
 - `gpt-5.4-nano` - GPT-5.4 Nano
-- `gpt-5.4-mini` - GPT-5.4 Mini
+- `gpt-5.4-mini` - GPT-5.4 Mini **(used as `MODEL_SPECIFIC_MEDIUM`)**
 - `gpt-5.4` - GPT-5.4
 - `gpt-5.2-pro` - GPT-5.2 Pro
-- `gpt-5.2` - GPT-5.2
+- `gpt-5.2` - GPT-5.2 **(used as `MODEL_SPECIFIC_HARD`)**
 - `gpt-5.1` - GPT-5.1
 - `gpt-5-nano` - GPT-5 Nano
-- `gpt-5-mini` - GPT-5 Mini
+- `gpt-5-mini` - GPT-5 Mini **(used as `MODEL_SPECIFIC_EASY`)**
 - `gpt-5` - GPT-5
 - `gpt-4o-mini` - GPT-4o Mini **(used as `MODEL_CLASSIFIER`)**
 - `gpt-4o` - GPT-4o
@@ -105,10 +105,10 @@ exact strings are on hand without needing to load that page's dynamic model list
 
 ## xAI
 
-- `grok-4.5` - Grok 4.5 **(used as `MODEL_HARD`)**
+- `grok-4.5` - Grok 4.5 **(used as `MODEL_GENERAL_HARD`)**
 - `grok-4.3` - Grok 4.3
-- `grok-4-fast-reasoning` - Grok 4 Fast Reasoning **(used as `MODEL_MEDIUM`)**
-- `grok-4-fast-non-reasoning` - Grok 4 Fast Non-Reasoning **(used as `MODEL_EASY`)**
+- `grok-4-fast-reasoning` - Grok 4 Fast Reasoning **(used as `MODEL_GENERAL_MEDIUM`)**
+- `grok-4-fast-non-reasoning` - Grok 4 Fast Non-Reasoning **(used as `MODEL_GENERAL_EASY`)**
 - `grok-4-0709` - Grok 4
 - `grok-3-mini` - Grok 3 Mini
 - `grok-3` - Grok 3
@@ -128,18 +128,30 @@ exact strings are on hand without needing to load that page's dynamic model list
 - `openai/gpt-oss-20b` - GPT OSS 20b
 - `openai/gpt-oss-120b` - GPT OSS 120b
 
-## Why these four were picked for this project
+## Why these models were picked for this project
 
-Users tend to want fast, snappy answers over long "thinking" delays, so easy/medium tiers favor speed - and
-xAI's Grok models tend to read a bit more conversational/human than other providers' equivalents, which is a
-nice fit for a chat bot.
+Each message is classified along two axes in a single classifier call: **category** (code / specific /
+general) and **difficulty** (easy / medium / hard). Category picks the provider, difficulty picks the tier
+within that provider. Chosen with cost in mind rather than always reaching for each provider's flagship.
 
-| Tier | Model | Reasoning |
+| Category | Provider | Why |
 |---|---|---|
-| `MODEL_CLASSIFIER` | `gpt-4o-mini` | Cheap, fast, only needs to output one word (easy/medium/hard) - doesn't need to sound human, so provider doesn't matter here |
-| `MODEL_EASY` | `grok-4-fast-non-reasoning` | xAI's fastest model, no reasoning step, for quick/simple questions |
-| `MODEL_MEDIUM` | `grok-4-fast-reasoning` | Same speed tier but with a light reasoning pass - middle ground between instant replies and the flagship |
-| `MODEL_HARD` | `grok-4.5` | xAI's flagship, full reasoning, for questions that actually need it |
+| `code` (programming/IT/devops) | Anthropic | Claude tends to be the strongest at code and technical reasoning |
+| `specific` (factual/knowledge questions) | OpenAI | Solid general knowledge accuracy |
+| `general` (casual/creative/opinion) | xAI | Grok reads more conversational/human, a nice fit for chit-chat |
+
+| Tier | code (Anthropic) | specific (OpenAI) | general (xAI) |
+|---|---|---|---|
+| `easy` | `claude-haiku-4-5-20251001` | `gpt-5-mini` | `grok-4-fast-non-reasoning` |
+| `medium` | `claude-sonnet-4-6` | `gpt-5.4-mini` | `grok-4-fast-reasoning` |
+| `hard` | `claude-opus-4-6` | `gpt-5.2` | `grok-4.5` |
+
+`MODEL_CLASSIFIER` stays `gpt-4o-mini` - cheap, fast, only needs to output "category,difficulty", doesn't
+need to sound human so provider doesn't matter here.
+
+Deliberately avoided each provider's priciest flagship (e.g. `claude-opus-4-8`, `gpt-5.5-pro`) to keep
+per-message cost down on 1min.ai credits - bump individual cells up in `.env` if quality matters more than
+cost for your use case.
 
 Source of truth for prices/context windows: check the 1min.ai dashboard directly, since it can change
 independently of this file.

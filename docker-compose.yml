@@ -6,9 +6,15 @@ services:
     environment:
       ONE_MIN_API_KEY: ${ONE_MIN_API_KEY}
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
-      MODEL_EASY: ${MODEL_EASY:-grok-4-fast-non-reasoning}
-      MODEL_MEDIUM: ${MODEL_MEDIUM:-grok-4-fast-reasoning}
-      MODEL_HARD: ${MODEL_HARD:-grok-4.5}
+      MODEL_CODE_EASY: ${MODEL_CODE_EASY:-claude-haiku-4-5-20251001}
+      MODEL_CODE_MEDIUM: ${MODEL_CODE_MEDIUM:-claude-sonnet-4-6}
+      MODEL_CODE_HARD: ${MODEL_CODE_HARD:-claude-opus-4-6}
+      MODEL_GENERAL_EASY: ${MODEL_GENERAL_EASY:-grok-4-fast-non-reasoning}
+      MODEL_GENERAL_MEDIUM: ${MODEL_GENERAL_MEDIUM:-grok-4-fast-reasoning}
+      MODEL_GENERAL_HARD: ${MODEL_GENERAL_HARD:-grok-4.5}
+      MODEL_SPECIFIC_EASY: ${MODEL_SPECIFIC_EASY:-gpt-5-mini}
+      MODEL_SPECIFIC_MEDIUM: ${MODEL_SPECIFIC_MEDIUM:-gpt-5.4-mini}
+      MODEL_SPECIFIC_HARD: ${MODEL_SPECIFIC_HARD:-gpt-5.2}
       MODEL_CLASSIFIER: ${MODEL_CLASSIFIER:-gpt-4o-mini}
     volumes:
       - proxy-data:/app/data

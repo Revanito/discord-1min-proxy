@@ -20,11 +20,11 @@ header to authenticate to each other.
   to the `/ask` invocation) with the question and the answer; `web_search` is optional (defaults to off) and
   lets the model ground its answer with live web results
 - Each `/ask` is single-shot and independent — there's no follow-up/multi-turn memory between questions
-- Each question is auto-classified as **easy / medium / hard** (via a cheap model call) and routed to a
-  different model per tier — fast xAI models for easy/medium, xAI's flagship for hard questions that
-  actually need reasoning
-- The reply shows the question in bold, the answer, and a small `-#` subtext footer with the tier and model
-  used
+- Each question is auto-classified (via a single cheap model call) along two axes — **category**
+  (code/IT → Anthropic, factual/knowledge → OpenAI, general/casual → xAI) and **difficulty**
+  (easy / medium / hard) — and routed to the matching model; see `MODELS.md` for the full matrix
+- The reply shows the question in bold, the answer, and a small `-#` subtext footer with the category, tier,
+  and model used
 - Long replies (>2000 chars) are split across multiple Discord messages
 - Optional `ALLOWED_GUILD_IDS` env var restricts which Discord servers the bot responds in
 
@@ -52,10 +52,10 @@ docker compose logs -f
 |---|---|---|
 | `ONE_MIN_API_KEY` | Yes | Your 1min.ai API key (from your 1min.ai account/API settings) |
 | `PROXY_SHARED_SECRET` | Yes | Any long random string you make up — it's just a shared password between the bot and the proxy, not sent to 1min.ai |
-| `MODEL_EASY` | No | Model used for easy questions, e.g. `grok-4-fast-non-reasoning` |
-| `MODEL_MEDIUM` | No | Model used for medium questions, e.g. `grok-4-fast-reasoning` |
-| `MODEL_HARD` | No | Model used for hard questions, e.g. `grok-4.5` |
-| `MODEL_CLASSIFIER` | No | Cheap/fast model used to classify difficulty before routing, e.g. `gpt-4o-mini` |
+| `MODEL_CODE_EASY` / `MODEL_CODE_MEDIUM` / `MODEL_CODE_HARD` | No | Models used for programming/IT questions, per difficulty tier (Anthropic by default) |
+| `MODEL_GENERAL_EASY` / `MODEL_GENERAL_MEDIUM` / `MODEL_GENERAL_HARD` | No | Models used for casual/general questions, per difficulty tier (xAI by default) |
+| `MODEL_SPECIFIC_EASY` / `MODEL_SPECIFIC_MEDIUM` / `MODEL_SPECIFIC_HARD` | No | Models used for factual/knowledge questions, per difficulty tier (OpenAI by default) |
+| `MODEL_CLASSIFIER` | No | Cheap/fast model used to classify category + difficulty before routing, e.g. `gpt-4o-mini` |
 | `DISCORD_BOT_TOKEN` | Yes | From the [Discord Developer Portal](https://discord.com/developers/applications) → your application → Bot → Token |
 | `ALLOWED_GUILD_IDS` | No | Comma-separated Discord server IDs to restrict the bot to; leave empty to allow any server it's invited to |
 | `DEV_GUILD_ID` | No | Your test server's ID, for instant slash-command sync while developing (global sync can take ~1 hour) |

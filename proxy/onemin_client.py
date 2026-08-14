@@ -15,7 +15,7 @@ def _headers() -> dict[str, str]:
 
 async def create_conversation(title: str) -> str:
     url = f"{settings.one_min_base_url}/api/conversations"
-    body = {"type": "UNIFY_CHAT_WITH_AI", "title": title, "model": settings.model_medium}
+    body = {"type": "UNIFY_CHAT_WITH_AI", "title": title, "model": settings.model_general_medium}
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         try:
             resp = await client.post(url, headers=_headers(), json=body)
@@ -58,15 +58,24 @@ async def chat(prompt: str, model: str, conversation_id: str | None = None, web_
 
 
 _CLASSIFY_PROMPT = (
-    "Classify how much reasoning this question needs. "
-    "Respond with exactly one word: easy, medium, or hard.\n\nQuestion: {question}"
+    "Classify this question along two axes.\n"
+    "Category - what kind of question it is:\n"
+    "  code - programming, software, IT, sysadmin, devops questions\n"
+    "  specific - factual/knowledge questions with a concrete correct answer (math, science, history, "
+    "definitions, current events, research)\n"
+    "  general - casual conversation, opinions, creative writing, advice, anything else\n"
+    "Difficulty - how much reasoning it needs: easy, medium, or hard.\n\n"
+    "Respond with exactly two words separated by a comma: category,difficulty "
+    "(e.g. 'code,hard' or 'general,easy').\n\nQuestion: {question}"
 )
 
+_CATEGORIES = ("code", "specific", "general")
+_DIFFICULTIES = ("easy", "medium", "hard")
 
-async def classify_difficulty(question: str) -> str:
+
+async def classify(question: str) -> tuple[str, str]:
     raw = await chat(prompt=_CLASSIFY_PROMPT.format(question=question), model=settings.model_classifier)
     lowered = raw.strip().lower()
-    for tier in ("easy", "medium", "hard"):
-        if tier in lowered:
-            return tier
-    return "medium"
+    category = next((c for c in _CATEGORIES if c in lowered), "general")
+    difficulty = next((d for d in _DIFFICULTIES if d in lowered), "medium")
+    return category, difficulty

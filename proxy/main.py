@@ -18,13 +18,26 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     model: str
+    category: str
     tier: str
 
 
-_TIER_MODELS = {
-    "easy": settings.model_easy,
-    "medium": settings.model_medium,
-    "hard": settings.model_hard,
+_MODEL_MATRIX = {
+    "code": {
+        "easy": settings.model_code_easy,
+        "medium": settings.model_code_medium,
+        "hard": settings.model_code_hard,
+    },
+    "general": {
+        "easy": settings.model_general_easy,
+        "medium": settings.model_general_medium,
+        "hard": settings.model_general_hard,
+    },
+    "specific": {
+        "easy": settings.model_specific_easy,
+        "medium": settings.model_specific_medium,
+        "hard": settings.model_specific_hard,
+    },
 }
 
 
@@ -35,8 +48,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
         conversation_id = await onemin_client.create_conversation(title=request.thread_id)
         await conversations.set_conversation_id(request.thread_id, conversation_id)
 
-    tier = await onemin_client.classify_difficulty(request.message)
-    model = _TIER_MODELS[tier]
+    category, tier = await onemin_client.classify(request.message)
+    model = _MODEL_MATRIX[category][tier]
 
     reply = await onemin_client.chat(
         conversation_id=conversation_id,
@@ -44,7 +57,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         model=model,
         web_search=request.web_search,
     )
-    return ChatResponse(reply=reply, model=model, tier=tier)
+    return ChatResponse(reply=reply, model=model, category=category, tier=tier)
 
 
 @app.get("/healthz")
