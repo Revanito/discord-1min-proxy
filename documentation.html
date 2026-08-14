@@ -402,12 +402,18 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
         that thread only.</li>
       <li>Optional <code>ALLOWED_GUILD_IDS</code> env var restricts which servers the bot responds in.</li>
       <li>Optional <code>DEV_GUILD_ID</code> syncs the slash command to one test server instantly, instead of a global sync that can take up to ~1 hour to propagate.</li>
-      <li><code>/ask</code> is marked <code>@app_commands.guild_only()</code> and <code>_guild_allowed()</code>
-        explicitly rejects a <code>None</code> guild, so it can never be invoked via DM even if
-        <code>ALLOWED_GUILD_IDS</code> is left unset. Without this, <code>not settings.allowed_guild_ids or
-        ...</code> would short-circuit to <code>True</code> for a DM's <code>guild=None</code> whenever the
-        allowlist is empty - meaning anyone able to DM the bot could run <code>/ask</code> outside any server
-        and burn through 1min.ai credits with no membership check at all.</li>
+      <li><code>_ask_allowed()</code> in <code>bot.py</code> branches on whether the interaction has a guild:
+        inside a server it's the existing <code>ALLOWED_GUILD_IDS</code> allowlist (empty = allow any server);
+        in a DM (<code>guild is None</code>) it instead checks the user's id against
+        <code>ALLOWED_DM_USER_IDS</code>, which defaults to deny-all when unset - the opposite default from
+        the guild check, since an empty DM allowlist should mean "nobody," not "everybody." An earlier version
+        of this check (<code>not settings.allowed_guild_ids or (guild is not None and ...)</code>)
+        short-circuited to <code>True</code> for any DM whenever <code>ALLOWED_GUILD_IDS</code> was unset,
+        letting anyone who could DM the bot run <code>/ask</code> outside any server with no restriction at
+        all - fixed by making the DM path its own explicit allowlist rather than falling out of the guild
+        check's default.</li>
+      <li>Long replies in a DM (no server, so no threads available) fall back to the same in-place chunked
+        messages used for short replies, instead of attempting thread creation.</li>
     </ul>
     <div class="warning">
       Invite the bot with <code>Send Messages</code>, <code>Create Public Threads</code>,
@@ -444,6 +450,7 @@ MODEL_CLASSIFIER=gpt-4o-mini
 
 DISCORD_BOT_TOKEN=your_discord_bot_token
 ALLOWED_GUILD_IDS=
+ALLOWED_DM_USER_IDS=
 DEV_GUILD_ID=</pre>
     <div class="note">
       Category picks the provider - <code>code</code> (programming/IT) goes to Anthropic, <code>specific</code>
@@ -513,6 +520,10 @@ docker compose logs -f</pre>
         (e.g. ask it to expand on a specific point from the first reply).</li>
       <li>Post a message in a normal channel or in someone else's thread &rarr; confirm the bot stays silent
         (it should only respond inside threads it created itself).</li>
+      <li>DM the bot directly with <code>/ask</code> as a user <i>not</i> listed in
+        <code>ALLOWED_DM_USER_IDS</code> &rarr; confirm it replies with the "not authorized" message rather
+        than answering. Add that user's id to <code>ALLOWED_DM_USER_IDS</code>, restart the bot, and confirm
+        the same DM now works.</li>
     </ol>
 
     <h2 id="troubleshooting">11. Troubleshooting</h2>

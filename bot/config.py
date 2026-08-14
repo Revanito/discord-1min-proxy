@@ -8,6 +8,9 @@ class Settings:
     allowed_guild_ids: set[int] = {
         int(g) for g in os.environ.get("ALLOWED_GUILD_IDS", "").split(",") if g.strip()
     }
+    allowed_dm_user_ids: set[int] = {
+        int(u) for u in os.environ.get("ALLOWED_DM_USER_IDS", "").split(",") if u.strip()
+    }
     dev_guild_id: int | None = (
         int(os.environ["DEV_GUILD_ID"]) if os.environ.get("DEV_GUILD_ID") else None
     )

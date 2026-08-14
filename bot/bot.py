@@ -23,10 +23,10 @@ async def _ask_proxy(thread_id: int, message: str, web_search: bool = False) -> 
     return resp.json()
 
 
-def _guild_allowed(guild: discord.Guild | None) -> bool:
-    if guild is None:
-        return False
-    return not settings.allowed_guild_ids or guild.id in settings.allowed_guild_ids
+def _ask_allowed(interaction: discord.Interaction) -> bool:
+    if interaction.guild is not None:
+        return not settings.allowed_guild_ids or interaction.guild.id in settings.allowed_guild_ids
+    return interaction.user.id in settings.allowed_dm_user_ids
 
 
 _THREAD_CHAR_THRESHOLD = 1000
@@ -64,10 +64,14 @@ async def on_tree_error(interaction: discord.Interaction, error: app_commands.Ap
 
 @tree.command(name="ask", description="Ask the AI a question")
 @app_commands.describe(question="What do you want to ask?", web_search="Let the AI search the web for up-to-date info")
-@app_commands.guild_only()
 async def ask(interaction: discord.Interaction, question: str, web_search: bool = False) -> None:
-    if not _guild_allowed(interaction.guild):
-        await interaction.response.send_message("This bot isn't enabled in this server.", ephemeral=True)
+    if not _ask_allowed(interaction):
+        message = (
+            "This bot isn't enabled in this server."
+            if interaction.guild is not None
+            else "You're not authorized to use this bot in DMs."
+        )
+        await interaction.response.send_message(message, ephemeral=True)
         return
 
     try:
@@ -90,7 +94,8 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
     footer = f"-# category: {result['category']} · tier: {result['tier']} · model: {result['model']}{search_note}"
     reply = result["reply"]
 
-    if len(reply) <= _THREAD_CHAR_THRESHOLD:
+    if len(reply) <= _THREAD_CHAR_THRESHOLD or interaction.guild is None:
+        # DMs can't have threads, so long replies there just get chunked in-place too.
         full = f"**{question}**\n{reply}\n{footer}"
         chunks = _chunk(full)
         await interaction.followup.send(chunks[0])

@@ -28,8 +28,9 @@ header to authenticate to each other.
   single-shot with no follow-up memory; longer replies get their own thread instead, and any message posted
   in that thread afterward continues the same 1min.ai conversation (multi-turn context, no `/ask` needed)
 - Optional `ALLOWED_GUILD_IDS` env var restricts which Discord servers the bot responds in
-- `/ask` only works inside a server, never in a DM to the bot — otherwise anyone who can message the bot
-  directly could burn through your 1min.ai credits without being in any of your servers
+- `/ask` in a DM to the bot is denied by default — set `ALLOWED_DM_USER_IDS` to a comma-separated list of
+  Discord user IDs to let specific people (e.g. just yourself) use it in DMs; everyone else is rejected,
+  so nobody can burn through your 1min.ai credits just by messaging the bot directly
 
 ![Example /ask reply](docs/ask-example.png)
 
@@ -61,6 +62,7 @@ docker compose logs -f
 | `MODEL_CLASSIFIER` | No | Cheap/fast model used to classify category + difficulty before routing, e.g. `gpt-4o-mini` |
 | `DISCORD_BOT_TOKEN` | Yes | From the [Discord Developer Portal](https://discord.com/developers/applications) → your application → Bot → Token |
 | `ALLOWED_GUILD_IDS` | No | Comma-separated Discord server IDs to restrict the bot to; leave empty to allow any server it's invited to |
+| `ALLOWED_DM_USER_IDS` | No | Comma-separated Discord user IDs allowed to use `/ask` in a DM to the bot; leave empty to deny all DMs (the safe default) |
 | `DEV_GUILD_ID` | No | Your test server's ID, for instant slash-command sync while developing (global sync can take ~1 hour) |
 
 <sub>Full list of valid model identifiers in `MODELS.md`, parsed from
@@ -74,6 +76,8 @@ Discord bot setup notes:
   Privileged Gateway Intents. This is required so the bot can read follow-up messages posted inside an
   answer thread and continue the conversation; without it the bot will fail to log in. It's the only
   privileged intent needed — the bot doesn't read message content anywhere outside of its own answer threads.
+- To find your own Discord user ID for `ALLOWED_DM_USER_IDS`: enable Developer Mode (User Settings →
+  Advanced), then right-click your own name anywhere and choose "Copy User ID".
 
 ## Troubleshooting: "The application did not respond" in Discord
 

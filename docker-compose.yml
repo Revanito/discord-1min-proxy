@@ -34,6 +34,7 @@ services:
       PROXY_URL: http://proxy:8000
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
       ALLOWED_GUILD_IDS: ${ALLOWED_GUILD_IDS:-}
+      ALLOWED_DM_USER_IDS: ${ALLOWED_DM_USER_IDS:-}
       DEV_GUILD_ID: ${DEV_GUILD_ID:-}
     dns:
       - 1.1.1.1
