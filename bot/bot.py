@@ -12,15 +12,31 @@ client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 
-async def _ask_proxy(thread_id: int, message: str, web_search: bool = False) -> dict:
+async def _ask_proxy(
+    thread_id: int, message: str, channel_label: str, web_search: bool = False
+) -> dict:
     async with httpx.AsyncClient(timeout=90.0) as http:
         resp = await http.post(
             f"{settings.proxy_url}/v1/chat",
             headers={"X-Proxy-Key": settings.proxy_shared_secret},
-            json={"thread_id": str(thread_id), "message": message, "web_search": web_search},
+            json={
+                "thread_id": str(thread_id),
+                "message": message,
+                "web_search": web_search,
+                "channel_label": channel_label,
+            },
         )
     resp.raise_for_status()
     return resp.json()
+
+
+def _channel_label(channel: discord.abc.MessageableChannel, guild: discord.Guild | None) -> str:
+    if guild is None:
+        return "DIRECT MESSAGE"
+    if isinstance(channel, discord.Thread):
+        parent = f"#{channel.parent.name} > " if channel.parent else ""
+        return f"{parent}{channel.name}"
+    return f"#{getattr(channel, 'name', 'unknown')}"
 
 
 def _ask_allowed(interaction: discord.Interaction) -> bool:
@@ -84,8 +100,9 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
         )
         raise
 
+    channel_label = _channel_label(interaction.channel, interaction.guild)
     try:
-        result = await _ask_proxy(interaction.id, question, web_search=web_search)
+        result = await _ask_proxy(interaction.id, question, channel_label, web_search=web_search)
     except httpx.HTTPError as exc:
         await interaction.followup.send(f"Sorry, I couldn't reach the AI proxy: {exc}")
         return
@@ -122,9 +139,10 @@ async def on_message(message: discord.Message) -> None:
     if proxy_thread_id is None:
         return
 
+    channel_label = _channel_label(message.channel, message.guild)
     async with message.channel.typing():
         try:
-            result = await _ask_proxy(proxy_thread_id, message.content)
+            result = await _ask_proxy(proxy_thread_id, message.content, channel_label)
         except httpx.HTTPError as exc:
             await message.channel.send(f"Sorry, I couldn't reach the AI proxy: {exc}")
             return

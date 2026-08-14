@@ -378,6 +378,17 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
       <code>onemin_client.py</code> and re-raised as <code>HTTPException(502, ...)</code>, so the bot
       always gets a clean JSON error instead of a stack trace.
     </div>
+    <div class="note">
+      The bot sends an extra <code>channel_label</code> field on every <code>/v1/chat</code> request -
+      <code>"DIRECT MESSAGE"</code> for DMs, <code>"#channel-name"</code> for a normal channel, or
+      <code>"#parent > thread-name"</code> for a thread follow-up - computed in <code>bot.py</code>'s
+      <code>_channel_label()</code>. The proxy logs it via Python's <code>logging</code> module (configured
+      with <code>logging.basicConfig()</code> so it actually reaches stdout, since uvicorn's own logging
+      config doesn't set up handlers for arbitrary loggers) as its own line right next to uvicorn's built-in
+      access-log line, so <code>docker compose logs -f</code> shows which channel or DM triggered each
+      request - useful for spotting unexpected usage (e.g. DMs from someone not in
+      <code>ALLOWED_DM_USER_IDS</code>, or a channel that shouldn't be using the bot).
+    </div>
 
     <h2 id="bot">6. Discord bot</h2>
     <p>Uses <code>discord.py</code> with default intents plus the privileged <b>Message Content Intent</b>
