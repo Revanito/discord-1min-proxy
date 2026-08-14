@@ -109,3 +109,7 @@ The proxy creates a fresh 1min.ai conversation per `/ask` call (keyed by the Dis
 persists that mapping in a Docker volume. For threaded answers, the bot separately persists a
 Discord-thread-id → interaction-id mapping in its own volume, so it knows which 1min.ai conversation to
 continue when a follow-up message arrives in that thread — both mappings survive container restarts.
+
+## License
+
+[MIT](LICENSE)
