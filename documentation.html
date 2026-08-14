@@ -163,8 +163,8 @@
         <h3>What it does</h3>
         <ul>
           <li>Lets any Discord server member ask a 1min.ai-backed model a question via <code>/ask</code></li>
-          <li>Auto-routes each question to an easy/medium/hard model tier based on a cheap classification call</li>
-          <li>Replies directly in the channel, shown grouped under the <code>/ask</code> invocation - each question is single-shot, with no memory between calls</li>
+          <li>Auto-routes each question by category (code/IT, factual, general) and easy/medium/hard difficulty, based on a single cheap classification call</li>
+          <li>Short replies post directly in the channel, single-shot with no memory between calls; long replies get their own thread that supports real multi-turn follow-ups</li>
           <li>Keeps the real 1min.ai key off the Discord bot entirely</li>
         </ul>
       </div>
@@ -201,10 +201,12 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     <p>
       Both services run as separate Docker containers, managed by a single <code>docker-compose.yml</code>,
       on one Proxmox LXC. The bot never holds the 1min.ai API key; the proxy never holds the Discord token.
-      Every question is classified easy/medium/hard before being answered, and routed to a different model
-      per tier - see <a href="#proxy">section 5</a>. Each <code>/ask</code> is single-shot: the bot passes
-      the Discord interaction id as the conversation key, so the proxy always creates a brand-new 1min.ai
-      conversation per question rather than threading multiple messages together.
+      Every question is classified by category and difficulty before being answered, and routed to a
+      different model per cell - see <a href="#proxy">section 5</a>. The bot passes the Discord interaction
+      id as the conversation key, so a fresh <code>/ask</code> always starts a brand-new 1min.ai conversation;
+      if the reply is long enough to get its own thread, that same interaction id is reused for any follow-up
+      messages posted in the thread, continuing the same conversation - see
+      <a href="#bot">section 6</a>.
     </p>
 
     <h2 id="onemin-api">3. 1min.ai API reference</h2>
@@ -304,9 +306,10 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
         <tr>
           <td><code>thread_id</code></td>
           <td>Yes</td>
-          <td>Conversation key sent by the bot - in practice this is the Discord interaction id, since each
-            <code>/ask</code> is single-shot and gets its own fresh 1min.ai conversation (the field name is a
-            holdover from an earlier thread-based design)</td>
+          <td>Conversation key sent by the bot - the Discord interaction id of the original <code>/ask</code>.
+            A fresh <code>/ask</code> always sends a new interaction id (new 1min.ai conversation); follow-up
+            messages posted in a bot-created answer thread reuse the same interaction id the bot stored for
+            that thread, continuing the same conversation</td>
         </tr>
         <tr>
           <td><code>message</code></td>
@@ -376,9 +379,10 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     </div>
 
     <h2 id="bot">6. Discord bot</h2>
-    <p>Uses <code>discord.py</code> with default (non-privileged) intents and an
-      <code>app_commands.CommandTree</code> for slash commands. It never reads message content, so no
-      privileged intent needs to be enabled in the Developer Portal.</p>
+    <p>Uses <code>discord.py</code> with default intents plus the privileged <b>Message Content Intent</b>
+      (must be enabled in the Developer Portal) and an <code>app_commands.CommandTree</code> for slash
+      commands. Message content is only read inside threads the bot itself created for a long answer - it
+      does not read or respond to normal channel messages.</p>
     <ul class="checklist">
       <li><code>/ask question:&lt;text&gt; web_search:&lt;True/False&gt;</code> &rarr; the bot defers the
         interaction, calls the proxy, then replies in-channel (Discord shows this grouped under
@@ -386,12 +390,15 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
         toggle in Discord's slash command UI), defaulting to off.</li>
       <li>The reply is a single message: the question in bold, then the answer, then a small
         <code>-#</code> subtext footer with the category, tier, and model used.</li>
-      <li>Each <code>/ask</code> is independent - there's no thread, and no memory carried between
-        questions. See <a href="#future">section 12</a> for reintroducing multi-turn follow-ups.</li>
       <li>Replies of 1000 characters or less post directly in the channel (split across multiple 2000-char
-        messages if the question+footer push it over Discord's per-message limit). Longer replies instead get
-        a dedicated thread off a short teaser message, so a long answer doesn't spam the channel - the thread
-        content is itself chunked into 2000-char messages if needed.</li>
+        messages if the question+footer push it over Discord's per-message limit), and are single-shot with
+        no memory carried between questions.</li>
+      <li>Longer replies instead get a dedicated thread off a short teaser message, so a long answer doesn't
+        spam the channel. <code>thread_conversations.py</code> persists a Discord-thread-id &rarr;
+        interaction-id mapping to a JSON file (own Docker volume); any non-bot message posted afterward in
+        that thread is picked up by an <code>on_message</code> listener and sent to the proxy using that same
+        interaction id, so it continues the same 1min.ai conversation - genuine multi-turn context, scoped to
+        that thread only.</li>
       <li>Optional <code>ALLOWED_GUILD_IDS</code> env var restricts which servers the bot responds in.</li>
       <li>Optional <code>DEV_GUILD_ID</code> syncs the slash command to one test server instantly, instead of a global sync that can take up to ~1 hour to propagate.</li>
     </ul>
@@ -519,10 +526,10 @@ docker compose logs -f</pre>
       <li>Streaming replies (SSE from 1min.ai) edited progressively into the Discord message.</li>
       <li>Swap the proxy's backend for a self-hosted assistant once one exists, without changing the bot.</li>
       <li>Let the classifier tier be manually overridden with a second <code>/ask</code> option, for cases where the auto-classification guesses wrong.</li>
-      <li>Per-user or per-guild default tier/model instead of one fixed set of three.</li>
-      <li>Reintroduce multi-turn follow-ups (v1 had this via Discord threads, dropped in favor of simpler
-        in-channel single-shot replies) - most likely via "reply to the bot's message to continue", using
-        the replied-to message id as the conversation key instead of a fresh interaction id each time.</li>
+      <li>Per-user or per-guild default tier/model instead of one fixed set of nine.</li>
+      <li>Multi-turn follow-ups in threads are done (see <a href="#bot">section 6</a>); a possible follow-on
+        is letting users continue a conversation by replying to the bot's message even outside a thread,
+        using the replied-to message id as the conversation key.</li>
     </ul>
   </div>
 </body>

@@ -2,9 +2,11 @@ import discord
 import httpx
 from discord import app_commands
 
+import thread_conversations
 from config import settings
 
 intents = discord.Intents.default()
+intents.message_content = True
 
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
@@ -98,8 +100,31 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
     )
     thread_name = question if len(question) <= 100 else f"{question[:97]}..."
     thread = await interaction.channel.create_thread(name=thread_name, message=teaser)
+    await thread_conversations.set_proxy_thread_id(thread.id, interaction.id)
     for chunk in _chunk(reply):
         await thread.send(chunk)
+
+
+@client.event
+async def on_message(message: discord.Message) -> None:
+    if message.author.bot or not isinstance(message.channel, discord.Thread):
+        return
+
+    proxy_thread_id = await thread_conversations.get_proxy_thread_id(message.channel.id)
+    if proxy_thread_id is None:
+        return
+
+    async with message.channel.typing():
+        try:
+            result = await _ask_proxy(proxy_thread_id, message.content)
+        except httpx.HTTPError as exc:
+            await message.channel.send(f"Sorry, I couldn't reach the AI proxy: {exc}")
+            return
+
+    footer = f"-# category: {result['category']} · tier: {result['tier']} · model: {result['model']}"
+    full = f"{result['reply']}\n{footer}"
+    for chunk in _chunk(full):
+        await message.channel.send(chunk)
 
 
 def main() -> None:

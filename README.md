@@ -19,14 +19,14 @@ header to authenticate to each other.
 - `/ask question:<text> web_search:<True/False>` → the bot replies directly in the channel (shown as a reply
   to the `/ask` invocation) with the question and the answer; `web_search` is optional (defaults to off) and
   lets the model ground its answer with live web results
-- Each `/ask` is single-shot and independent — there's no follow-up/multi-turn memory between questions
 - Each question is auto-classified (via a single cheap model call) along two axes — **category**
   (code/IT → Anthropic, factual/knowledge → OpenAI, general/casual → xAI) and **difficulty**
   (easy / medium / hard) — and routed to the matching model; see `MODELS.md` for the full matrix
 - The reply shows the question in bold, the answer, and a small `-#` subtext footer with the category, tier,
   and model used
-- Short replies (≤1000 chars) post directly in the channel, split across multiple messages if needed; longer
-  replies get their own thread instead, so the answer doesn't spam the channel
+- Short replies (≤1000 chars) post directly in the channel, split across multiple messages if needed, and are
+  single-shot with no follow-up memory; longer replies get their own thread instead, and any message posted
+  in that thread afterward continues the same 1min.ai conversation (multi-turn context, no `/ask` needed)
 - Optional `ALLOWED_GUILD_IDS` env var restricts which Discord servers the bot responds in
 
 ![Example /ask reply](docs/ask-example.png)
@@ -67,7 +67,11 @@ docker compose logs -f
 Discord bot setup notes:
 - Invite the bot with at least the `Send Messages`, `Create Public Threads`, `Send Messages in Threads`, and
   `Use Application Commands` permissions (thread permissions are needed for replies over 1000 characters).
-- No privileged intents are required (the bot doesn't read message content).
+- Enable the **Message Content Intent** for the bot in the
+  [Discord Developer Portal](https://discord.com/developers/applications) → your application → Bot →
+  Privileged Gateway Intents. This is required so the bot can read follow-up messages posted inside an
+  answer thread and continue the conversation; without it the bot will fail to log in. It's the only
+  privileged intent needed — the bot doesn't read message content anywhere outside of its own answer threads.
 
 ## Troubleshooting: "The application did not respond" in Discord
 
@@ -93,6 +97,7 @@ docker compose down          # stop
 git pull && docker compose up -d --build   # update to latest code
 ```
 
-The proxy still creates a fresh 1min.ai conversation per `/ask` call (keyed by the Discord interaction id) and
-persists that mapping in a Docker volume — this is just bookkeeping for the single-shot request, not
-multi-turn memory.
+The proxy creates a fresh 1min.ai conversation per `/ask` call (keyed by the Discord interaction id) and
+persists that mapping in a Docker volume. For threaded answers, the bot separately persists a
+Discord-thread-id → interaction-id mapping in its own volume, so it knows which 1min.ai conversation to
+continue when a follow-up message arrives in that thread — both mappings survive container restarts.
