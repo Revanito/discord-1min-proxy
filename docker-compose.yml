@@ -16,6 +16,9 @@ services:
       MODEL_SPECIFIC_MEDIUM: ${MODEL_SPECIFIC_MEDIUM:-gpt-5.4-mini}
       MODEL_SPECIFIC_HARD: ${MODEL_SPECIFIC_HARD:-gpt-5.2}
       MODEL_CLASSIFIER: ${MODEL_CLASSIFIER:-gpt-4o-mini}
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     volumes:
       - proxy-data:/app/data
     ports:
@@ -32,6 +35,9 @@ services:
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
       ALLOWED_GUILD_IDS: ${ALLOWED_GUILD_IDS:-}
       DEV_GUILD_ID: ${DEV_GUILD_ID:-}
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
 volumes:
   proxy-data:
