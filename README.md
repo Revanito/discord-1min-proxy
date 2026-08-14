@@ -53,9 +53,15 @@ docker compose logs -f
 |---|---|---|
 | `ONE_MIN_API_KEY` | Yes | Your 1min.ai API key (from your 1min.ai account/API settings) |
 | `PROXY_SHARED_SECRET` | Yes | Any long random string you make up — it's just a shared password between the bot and the proxy, not sent to 1min.ai |
-| `MODEL_CODE_EASY` / `MODEL_CODE_MEDIUM` / `MODEL_CODE_HARD` | No | Models used for programming/IT questions, per difficulty tier (Anthropic by default) |
-| `MODEL_GENERAL_EASY` / `MODEL_GENERAL_MEDIUM` / `MODEL_GENERAL_HARD` | No | Models used for casual/general questions, per difficulty tier (xAI by default) |
-| `MODEL_SPECIFIC_EASY` / `MODEL_SPECIFIC_MEDIUM` / `MODEL_SPECIFIC_HARD` | No | Models used for factual/knowledge questions, per difficulty tier (OpenAI by default) |
+| `MODEL_CODE_EASY` | No | Model for easy programming/IT questions (Anthropic by default) |
+| `MODEL_CODE_MEDIUM` | No | Model for medium programming/IT questions (Anthropic by default) |
+| `MODEL_CODE_HARD` | No | Model for hard programming/IT questions (Anthropic by default) |
+| `MODEL_GENERAL_EASY` | No | Model for easy casual/general questions (xAI by default) |
+| `MODEL_GENERAL_MEDIUM` | No | Model for medium casual/general questions (xAI by default) |
+| `MODEL_GENERAL_HARD` | No | Model for hard casual/general questions (xAI by default) |
+| `MODEL_SPECIFIC_EASY` | No | Model for easy factual/knowledge questions (OpenAI by default) |
+| `MODEL_SPECIFIC_MEDIUM` | No | Model for medium factual/knowledge questions (OpenAI by default) |
+| `MODEL_SPECIFIC_HARD` | No | Model for hard factual/knowledge questions (OpenAI by default) |
 | `MODEL_CLASSIFIER` | No | Cheap/fast model used to classify category + difficulty before routing, e.g. `gpt-4o-mini` |
 | `DISCORD_BOT_TOKEN` | Yes | From the [Discord Developer Portal](https://discord.com/developers/applications) → your application → Bot → Token |
 | `ALLOWED_GUILD_IDS` | No | Comma-separated Discord server IDs to restrict the bot to; leave empty to allow any server it's invited to |
@@ -68,6 +74,23 @@ Discord bot setup notes:
 - Invite the bot with at least the `Send Messages`, `Create Public Threads`, `Send Messages in Threads`, and
   `Use Application Commands` permissions (thread permissions are needed for replies over 1000 characters).
 - No privileged intents are required (the bot doesn't read message content).
+
+## Troubleshooting: "The application did not respond" in Discord
+
+Discord requires the bot to acknowledge a slash command within 3 seconds, or it invalidates the interaction
+(the bot's reply then fails with a `404 Unknown interaction` in the logs, and Discord shows "The application
+did not respond" until you retry). If this happens consistently, it's almost always slow DNS resolution
+inside the container rather than an actual code/network problem — check with:
+
+```bash
+docker compose exec bot python3 -c "import socket,time; t=time.time(); socket.getaddrinfo('discord.com',443,socket.AF_INET); print(time.time()-t)"
+```
+
+If that takes multiple seconds instead of milliseconds, Docker's embedded DNS (`127.0.0.11`) is likely falling
+back through a slow or unreachable upstream resolver (e.g. a local router/host resolver on an LXC/VM) before
+reaching a working one. `docker-compose.yml` already pins both services to `1.1.1.1` and `8.8.8.8` via the
+`dns:` key to avoid this — if you still see slow lookups after pulling the latest version, confirm that
+`dns:` block is present and rebuild (`docker compose up -d --build`).
 
 ## Stopping / updating
 
