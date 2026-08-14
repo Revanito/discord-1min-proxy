@@ -34,6 +34,8 @@ header to authenticate to each other.
 
 ![Example /ask reply](docs/ask-example.png)
 
+![DM rejection message for users not in ALLOWED_DM_USER_IDS](docs/dm-not-authorized.png)
+
 See `documentation.html` for the full architecture, the 1min.ai API reference used, and a Proxmox LXC
 deployment guide. See `MODELS.md` for the full list of 1min.ai model identifiers, parsed from
 [1min.ai's Chat with AI API docs](https://docs.1min.ai/docs/api/chat-with-ai-api) — worth re-checking that
