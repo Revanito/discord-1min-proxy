@@ -388,7 +388,10 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
         <code>-#</code> subtext footer with the category, tier, and model used.</li>
       <li>Each <code>/ask</code> is independent - there's no thread, and no memory carried between
         questions. See <a href="#future">section 12</a> for reintroducing multi-turn follow-ups.</li>
-      <li>Splits replies over 2000 characters into multiple messages (Discord's hard limit).</li>
+      <li>Replies of 1000 characters or less post directly in the channel (split across multiple 2000-char
+        messages if the question+footer push it over Discord's per-message limit). Longer replies instead get
+        a dedicated thread off a short teaser message, so a long answer doesn't spam the channel - the thread
+        content is itself chunked into 2000-char messages if needed.</li>
       <li>Optional <code>ALLOWED_GUILD_IDS</code> env var restricts which servers the bot responds in.</li>
       <li>Optional <code>DEV_GUILD_ID</code> syncs the slash command to one test server instantly, instead of a global sync that can take up to ~1 hour to propagate.</li>
     </ul>

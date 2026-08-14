@@ -25,7 +25,8 @@ header to authenticate to each other.
   (easy / medium / hard) — and routed to the matching model; see `MODELS.md` for the full matrix
 - The reply shows the question in bold, the answer, and a small `-#` subtext footer with the category, tier,
   and model used
-- Long replies (>2000 chars) are split across multiple Discord messages
+- Short replies (≤1000 chars) post directly in the channel, split across multiple messages if needed; longer
+  replies get their own thread instead, so the answer doesn't spam the channel
 - Optional `ALLOWED_GUILD_IDS` env var restricts which Discord servers the bot responds in
 
 ![Example /ask reply](docs/ask-example.png)
@@ -64,7 +65,8 @@ docker compose logs -f
 [docs.1min.ai/docs/api/chat-with-ai-api](https://docs.1min.ai/docs/api/chat-with-ai-api).</sub>
 
 Discord bot setup notes:
-- Invite the bot with at least the `Send Messages` and `Use Application Commands` permissions.
+- Invite the bot with at least the `Send Messages`, `Create Public Threads`, `Send Messages in Threads`, and
+  `Use Application Commands` permissions (thread permissions are needed for replies over 1000 characters).
 - No privileged intents are required (the bot doesn't read message content).
 
 ## Stopping / updating

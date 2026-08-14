@@ -25,6 +25,13 @@ def _guild_allowed(guild: discord.Guild | None) -> bool:
     return not settings.allowed_guild_ids or (guild is not None and guild.id in settings.allowed_guild_ids)
 
 
+_THREAD_CHAR_THRESHOLD = 1000
+
+
+def _chunk(text: str, size: int = 2000) -> list[str]:
+    return [text[i : i + size] for i in range(0, len(text), size)]
+
+
 @client.event
 async def on_ready() -> None:
     if settings.dev_guild_id:
@@ -76,12 +83,23 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
 
     search_note = " · web search: on" if web_search else ""
     footer = f"-# category: {result['category']} · tier: {result['tier']} · model: {result['model']}{search_note}"
-    full = f"**{question}**\n{result['reply']}\n{footer}"
+    reply = result["reply"]
 
-    chunks = [full[i : i + 2000] for i in range(0, len(full), 2000)]
-    await interaction.followup.send(chunks[0])
-    for chunk in chunks[1:]:
-        await interaction.channel.send(chunk)
+    if len(reply) <= _THREAD_CHAR_THRESHOLD:
+        full = f"**{question}**\n{reply}\n{footer}"
+        chunks = _chunk(full)
+        await interaction.followup.send(chunks[0])
+        for chunk in chunks[1:]:
+            await interaction.channel.send(chunk)
+        return
+
+    teaser = await interaction.followup.send(
+        f"**{question}**\n{footer}\n-# 🧵 answer in thread below", wait=True
+    )
+    thread_name = question if len(question) <= 100 else f"{question[:97]}..."
+    thread = await teaser.create_thread(name=thread_name)
+    for chunk in _chunk(reply):
+        await thread.send(chunk)
 
 
 def main() -> None:
