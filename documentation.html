@@ -289,8 +289,9 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
   bot/
     Dockerfile
     requirements.txt
-    bot.py            # discord.py client
-    config.py         # settings loaded from environment</pre>
+    bot.py                    # discord.py client
+    config.py                 # settings loaded from environment
+    thread_conversations.py   # discord thread id -> interaction_id, persisted to data/thread_conversations.json</pre>
 
     <h2 id="proxy">5. FastAPI proxy</h2>
     <p><code>POST /v1/chat</code> is the only endpoint the bot calls.</p>
@@ -402,6 +403,15 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
       <li>Optional <code>ALLOWED_GUILD_IDS</code> env var restricts which servers the bot responds in.</li>
       <li>Optional <code>DEV_GUILD_ID</code> syncs the slash command to one test server instantly, instead of a global sync that can take up to ~1 hour to propagate.</li>
     </ul>
+    <div class="warning">
+      Invite the bot with <code>Send Messages</code>, <code>Create Public Threads</code>,
+      <code>Send Messages in Threads</code>, and <code>Use Application Commands</code> permissions - the
+      thread permissions are required for replies over 1000 characters, and creating a thread from the
+      interaction's followup message specifically needs <code>channel.create_thread(message=...)</code>
+      rather than calling <code>.create_thread()</code> on the message itself, since a
+      <code>WebhookMessage</code> doesn't carry full guild context (raises
+      <code>ValueError: This message does not have guild info attached</code> otherwise).
+    </div>
     <div class="card">
       <h3>Example reply</h3>
       <img src="docs/ask-example.png" alt="Example /ask reply showing the question, answer, and tier/model footer" style="max-width:100%; border-radius:8px; border:1px solid var(--border);">
@@ -489,7 +499,14 @@ docker compose logs -f</pre>
       <li>Try questions of clearly different difficulty (e.g. "hi" vs. a multi-step reasoning question) and confirm the subtext footer under each reply shows a different tier/model.</li>
       <li>In Discord, run <code>/ask question:...</code> &rarr; the bot replies in-channel with the question, answer, and footer in one message.</li>
       <li>Run <code>/ask question:... web_search:True</code> with a question about something recent (e.g. "what happened in the news today?") &rarr; confirm the answer reflects current info rather than a knowledge cutoff.</li>
-      <li>Ask for a long reply (&gt;2000 chars) &rarr; confirm the bot splits it into multiple messages.</li>
+      <li>Ask a question expected to produce a long reply (&gt;1000 chars) &rarr; confirm the channel gets a
+        short teaser message with a "answer in thread below" note, and a real clickable thread appears with
+        the full answer (chunked into 2000-char messages if it's especially long).</li>
+      <li>Post a plain follow-up message (no <code>/ask</code>) inside that thread &rarr; confirm the bot
+        replies without any slash command, and that the answer reflects context from the original question
+        (e.g. ask it to expand on a specific point from the first reply).</li>
+      <li>Post a message in a normal channel or in someone else's thread &rarr; confirm the bot stays silent
+        (it should only respond inside threads it created itself).</li>
     </ol>
 
     <h2 id="troubleshooting">11. Troubleshooting</h2>
@@ -498,10 +515,32 @@ docker compose logs -f</pre>
       <li>Check <code>docker compose logs bot</code> for connection errors.</li>
       <li>If <code>ALLOWED_GUILD_IDS</code> is set, confirm the server's id is in the list.</li>
     </ul>
-    <h3><code>NotFound: 404 Unknown interaction</code> on <code>interaction.response.defer()</code></h3>
+    <h3><code>NotFound: 404 Unknown interaction</code> on <code>interaction.response.defer()</code> / "The application did not respond" in Discord</h3>
     <ul>
-      <li>Means Discord's 3-second acknowledgement window expired before the bot's <code>defer()</code> call reached Discord. If it happens on every single attempt, suspect host clock drift (<code>timedatectl status</code>, confirm <code>System clock synchronized: yes</code>) or slow/broken outbound DNS/TLS from the container to <code>discord.com</code>.</li>
+      <li>Means Discord's 3-second acknowledgement window expired before the bot's <code>defer()</code> call
+        reached Discord. If it happens consistently, it's almost always slow DNS resolution inside the
+        container rather than a real network problem - check with:
+        <pre>docker compose exec bot python3 -c "import socket,time; t=time.time(); socket.getaddrinfo('discord.com',443,socket.AF_INET); print(time.time()-t)"</pre>
+        If that takes multiple seconds instead of milliseconds, Docker's embedded DNS (<code>127.0.0.11</code>)
+        is likely falling back through a slow or unreachable upstream resolver (e.g. a local router/host
+        resolver on an LXC/VM) before reaching a working one. <code>docker-compose.yml</code> pins both
+        services to <code>1.1.1.1</code> and <code>8.8.8.8</code> via the <code>dns:</code> key to avoid this
+        - confirm that block is present and rebuild if lookups are still slow. Also worth ruling out host
+        clock drift (<code>timedatectl status</code>, confirm <code>System clock synchronized: yes</code>).</li>
       <li>If <code>print()</code> diagnostics added to the bot don't show up in <code>docker compose logs</code>, that's Python's stdout buffering in non-TTY containers, not a sign the code didn't run - set <code>ENV PYTHONUNBUFFERED=1</code> in the bot's Dockerfile (already set in this repo).</li>
+    </ul>
+    <h3>Bot won't log in / <code>PrivilegedIntentsRequired</code></h3>
+    <ul>
+      <li>The bot requests the <b>Message Content Intent</b> (needed to read follow-up messages inside answer
+        threads). Enable it in the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a>
+        &rarr; your application &rarr; Bot &rarr; Privileged Gateway Intents, then restart the bot container.</li>
+    </ul>
+    <h3>Thread doesn't get created for a long reply</h3>
+    <ul>
+      <li>Check <code>docker compose logs bot</code> for a <code>[tree error]</code> line right after the
+        teaser message posts - a <code>Forbidden</code> means the bot's role is missing
+        <code>Create Public Threads</code> / <code>Send Messages in Threads</code> permissions in that
+        server; grant them on the bot's role rather than re-inviting the bot.</li>
     </ul>
     <h3>401 from the proxy</h3>
     <ul>
