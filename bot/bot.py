@@ -24,7 +24,9 @@ async def _ask_proxy(thread_id: int, message: str, web_search: bool = False) -> 
 
 
 def _guild_allowed(guild: discord.Guild | None) -> bool:
-    return not settings.allowed_guild_ids or (guild is not None and guild.id in settings.allowed_guild_ids)
+    if guild is None:
+        return False
+    return not settings.allowed_guild_ids or guild.id in settings.allowed_guild_ids
 
 
 _THREAD_CHAR_THRESHOLD = 1000
@@ -62,6 +64,7 @@ async def on_tree_error(interaction: discord.Interaction, error: app_commands.Ap
 
 @tree.command(name="ask", description="Ask the AI a question")
 @app_commands.describe(question="What do you want to ask?", web_search="Let the AI search the web for up-to-date info")
+@app_commands.guild_only()
 async def ask(interaction: discord.Interaction, question: str, web_search: bool = False) -> None:
     if not _guild_allowed(interaction.guild):
         await interaction.response.send_message("This bot isn't enabled in this server.", ephemeral=True)

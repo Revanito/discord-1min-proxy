@@ -402,6 +402,12 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
         that thread only.</li>
       <li>Optional <code>ALLOWED_GUILD_IDS</code> env var restricts which servers the bot responds in.</li>
       <li>Optional <code>DEV_GUILD_ID</code> syncs the slash command to one test server instantly, instead of a global sync that can take up to ~1 hour to propagate.</li>
+      <li><code>/ask</code> is marked <code>@app_commands.guild_only()</code> and <code>_guild_allowed()</code>
+        explicitly rejects a <code>None</code> guild, so it can never be invoked via DM even if
+        <code>ALLOWED_GUILD_IDS</code> is left unset. Without this, <code>not settings.allowed_guild_ids or
+        ...</code> would short-circuit to <code>True</code> for a DM's <code>guild=None</code> whenever the
+        allowlist is empty - meaning anyone able to DM the bot could run <code>/ask</code> outside any server
+        and burn through 1min.ai credits with no membership check at all.</li>
     </ul>
     <div class="warning">
       Invite the bot with <code>Send Messages</code>, <code>Create Public Threads</code>,

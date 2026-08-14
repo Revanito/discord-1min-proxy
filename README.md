@@ -28,6 +28,8 @@ header to authenticate to each other.
   single-shot with no follow-up memory; longer replies get their own thread instead, and any message posted
   in that thread afterward continues the same 1min.ai conversation (multi-turn context, no `/ask` needed)
 - Optional `ALLOWED_GUILD_IDS` env var restricts which Discord servers the bot responds in
+- `/ask` only works inside a server, never in a DM to the bot — otherwise anyone who can message the bot
+  directly could burn through your 1min.ai credits without being in any of your servers
 
 ![Example /ask reply](docs/ask-example.png)
 
