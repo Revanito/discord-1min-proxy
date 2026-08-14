@@ -97,7 +97,7 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
         f"**{question}**\n{footer}\n-# 🧵 answer in thread below", wait=True
     )
     thread_name = question if len(question) <= 100 else f"{question[:97]}..."
-    thread = await teaser.create_thread(name=thread_name)
+    thread = await interaction.channel.create_thread(name=thread_name, message=teaser)
     for chunk in _chunk(reply):
         await thread.send(chunk)
 
