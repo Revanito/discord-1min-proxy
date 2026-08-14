@@ -53,15 +53,9 @@ docker compose logs -f
 |---|---|---|
 | `ONE_MIN_API_KEY` | Yes | Your 1min.ai API key (from your 1min.ai account/API settings) |
 | `PROXY_SHARED_SECRET` | Yes | Any long random string you make up — it's just a shared password between the bot and the proxy, not sent to 1min.ai |
-| `MODEL_CODE_EASY` | No | Model for easy programming/IT questions (Anthropic by default) |
-| `MODEL_CODE_MEDIUM` | No | Model for medium programming/IT questions (Anthropic by default) |
-| `MODEL_CODE_HARD` | No | Model for hard programming/IT questions (Anthropic by default) |
-| `MODEL_GENERAL_EASY` | No | Model for easy casual/general questions (xAI by default) |
-| `MODEL_GENERAL_MEDIUM` | No | Model for medium casual/general questions (xAI by default) |
-| `MODEL_GENERAL_HARD` | No | Model for hard casual/general questions (xAI by default) |
-| `MODEL_SPECIFIC_EASY` | No | Model for easy factual/knowledge questions (OpenAI by default) |
-| `MODEL_SPECIFIC_MEDIUM` | No | Model for medium factual/knowledge questions (OpenAI by default) |
-| `MODEL_SPECIFIC_HARD` | No | Model for hard factual/knowledge questions (OpenAI by default) |
+| `MODEL_CODE_EASY` / `MODEL_CODE_MEDIUM` / `MODEL_CODE_HARD` | No | Models used for programming/IT questions, per difficulty tier (Anthropic by default) |
+| `MODEL_GENERAL_EASY` / `MODEL_GENERAL_MEDIUM` / `MODEL_GENERAL_HARD` | No | Models used for casual/general questions, per difficulty tier (xAI by default) |
+| `MODEL_SPECIFIC_EASY` / `MODEL_SPECIFIC_MEDIUM` / `MODEL_SPECIFIC_HARD` | No | Models used for factual/knowledge questions, per difficulty tier (OpenAI by default) |
 | `MODEL_CLASSIFIER` | No | Cheap/fast model used to classify category + difficulty before routing, e.g. `gpt-4o-mini` |
 | `DISCORD_BOT_TOKEN` | Yes | From the [Discord Developer Portal](https://discord.com/developers/applications) → your application → Bot → Token |
 | `ALLOWED_GUILD_IDS` | No | Comma-separated Discord server IDs to restrict the bot to; leave empty to allow any server it's invited to |
