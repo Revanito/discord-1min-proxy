@@ -166,6 +166,7 @@
           <li>Lets any Discord server member ask a 1min.ai-backed model a question via <code>/ask</code></li>
           <li>Auto-routes each question by category (code/IT, factual, general) and easy/medium/hard difficulty, based on a single cheap classification call</li>
           <li>Short replies post directly in the channel, single-shot with no memory between calls; long replies get their own thread that supports real multi-turn follow-ups</li>
+          <li>Allowlisted users can also DM the bot directly, and clear the bot's DM history any time with <code>/forget</code></li>
           <li>Keeps the real 1min.ai key off the Discord bot entirely</li>
         </ul>
       </div>
@@ -426,6 +427,15 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
         check's default.</li>
       <li>Long replies in a DM (no server, so no threads available) fall back to the same in-place chunked
         messages used for short replies, instead of attempting thread creation.</li>
+      <li><code>/forget</code> takes no options and is DM-only (rejects with the same "not authorized"
+        style message as an unauthorized <code>/ask</code> if run in a server or by a user not in
+        <code>ALLOWED_DM_USER_IDS</code>), walks the entire DM channel history via
+        <code>interaction.channel.history(limit=None)</code>, and deletes every message authored by the bot.
+        Discord's bulk-delete/"purge" endpoint only works in guild text channels, not DMs, so each message is
+        deleted individually - discord.py's internal request queue throttles this automatically, so no manual
+        rate-limit handling is needed. Because a DM <code>/ask</code> already starts a fresh 1min.ai
+        conversation on every call (no threads means no persistent context in DMs to begin with), this command
+        is purely a visible-history wipe; there's no separate backend "memory" to clear alongside it.</li>
     </ul>
     <div class="warning">
       Invite the bot with <code>Send Messages</code>, <code>Create Public Threads</code>,
@@ -540,6 +550,11 @@ docker compose logs -f</pre>
         <code>ALLOWED_DM_USER_IDS</code> &rarr; confirm it replies with the "not authorized" message rather
         than answering. Add that user's id to <code>ALLOWED_DM_USER_IDS</code>, restart the bot, and confirm
         the same DM now works.</li>
+      <li>Run <code>/forget</code> in a normal server channel &rarr; confirm it's rejected with "This command
+        only works in DMs." rather than deleting anything.</li>
+      <li>DM the bot a few questions, then run <code>/forget</code> &rarr; confirm every message the bot sent
+        in that DM disappears and you get an ephemeral "Deleted N messages." confirmation, while your own
+        messages in the DM are left untouched.</li>
     </ol>
 
     <h2 id="troubleshooting">11. Troubleshooting</h2>

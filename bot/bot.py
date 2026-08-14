@@ -130,6 +130,29 @@ async def ask(interaction: discord.Interaction, question: str, web_search: bool 
         await thread.send(chunk)
 
 
+@tree.command(name="forget", description="Delete the bot's messages in this DM")
+async def forget(interaction: discord.Interaction) -> None:
+    if interaction.guild is not None:
+        await interaction.response.send_message("This command only works in DMs.", ephemeral=True)
+        return
+    if interaction.user.id not in settings.allowed_dm_user_ids:
+        await interaction.response.send_message("You're not authorized to use this bot in DMs.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    deleted = 0
+    async for message in interaction.channel.history(limit=None):
+        if message.author.id == client.user.id:
+            try:
+                await message.delete()
+                deleted += 1
+            except discord.HTTPException:
+                pass
+
+    await interaction.followup.send(f"Deleted {deleted} message{'s' if deleted != 1 else ''}.", ephemeral=True)
+
+
 @client.event
 async def on_message(message: discord.Message) -> None:
     if message.author.bot or not isinstance(message.channel, discord.Thread):

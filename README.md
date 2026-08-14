@@ -31,6 +31,10 @@ header to authenticate to each other.
 - `/ask` in a DM to the bot is denied by default — set `ALLOWED_DM_USER_IDS` to a comma-separated list of
   Discord user IDs to let specific people (e.g. just yourself) use it in DMs; everyone else is rejected,
   so nobody can burn through your 1min.ai credits just by messaging the bot directly
+- `/forget` (DM-only, same allowlist as above) deletes every message the bot has ever sent in that DM. Since
+  a fresh `/ask` in a DM already starts a brand-new 1min.ai conversation every time (DMs can't have threads,
+  so there's no persistent context to carry between separate `/ask` calls there in the first place), this is
+  purely a visible-history cleanup — there's no separate "memory" step needed behind it
 
 ![Example /ask reply](docs/ask-example.png)
 
