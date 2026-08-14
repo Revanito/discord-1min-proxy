@@ -30,7 +30,7 @@ async def _ask_proxy(
     return resp.json()
 
 
-def _channel_label(channel: discord.abc.MessageableChannel, guild: discord.Guild | None) -> str:
+def _channel_label(channel: discord.abc.Messageable, guild: discord.Guild | None) -> str:
     if guild is None:
         return "DIRECT MESSAGE"
     if isinstance(channel, discord.Thread):
