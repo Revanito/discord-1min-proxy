@@ -166,7 +166,7 @@
           <li>Lets any Discord server member ask a 1min.ai-backed model a question via <code>/ask</code></li>
           <li>Auto-routes each question by category (code/IT, factual, general) and easy/medium/hard difficulty, based on a single cheap classification call</li>
           <li>Short replies post directly in the channel, single-shot with no memory between calls; long replies get their own thread that supports real multi-turn follow-ups</li>
-          <li>Allowlisted users can also DM the bot directly, and clear the bot's DM history any time with <code>/forget</code></li>
+          <li>Server-only: <code>/ask</code> is not available in DMs</li>
           <li>Keeps the real 1min.ai key off the Discord bot entirely</li>
         </ul>
       </div>
@@ -385,14 +385,13 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     </div>
     <div class="note">
       The bot sends an extra <code>channel_label</code> field on every <code>/v1/chat</code> request -
-      <code>"DIRECT MESSAGE"</code> for DMs, <code>"#channel-name"</code> for a normal channel, or
+      <code>"#channel-name"</code> for a normal channel, or
       <code>"#parent > thread-name"</code> for a thread follow-up - computed in <code>bot.py</code>'s
       <code>_channel_label()</code>. The proxy logs it via Python's <code>logging</code> module (configured
       with <code>logging.basicConfig()</code> so it actually reaches stdout, since uvicorn's own logging
       config doesn't set up handlers for arbitrary loggers) as its own line right next to uvicorn's built-in
-      access-log line, so <code>docker compose logs -f</code> shows which channel or DM triggered each
-      request - useful for spotting unexpected usage (e.g. DMs from someone not in
-      <code>ALLOWED_DM_USER_IDS</code>, or a channel that shouldn't be using the bot).
+      access-log line, so <code>docker compose logs -f</code> shows which channel triggered each
+      request - useful for spotting unexpected usage (e.g. a channel that shouldn't be using the bot).
     </div>
 
     <h2 id="bot">6. Discord bot</h2>
@@ -418,27 +417,9 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
         that thread only.</li>
       <li>Optional <code>ALLOWED_GUILD_IDS</code> env var restricts which servers the bot responds in.</li>
       <li>Optional <code>DEV_GUILD_ID</code> syncs the slash command to one test server instantly, instead of a global sync that can take up to ~1 hour to propagate.</li>
-      <li><code>_ask_allowed()</code> in <code>bot.py</code> branches on whether the interaction has a guild:
-        inside a server it's the existing <code>ALLOWED_GUILD_IDS</code> allowlist (empty = allow any server);
-        in a DM (<code>guild is None</code>) it instead checks the user's id against
-        <code>ALLOWED_DM_USER_IDS</code>, which defaults to deny-all when unset - the opposite default from
-        the guild check, since an empty DM allowlist should mean "nobody," not "everybody." An earlier version
-        of this check (<code>not settings.allowed_guild_ids or (guild is not None and ...)</code>)
-        short-circuited to <code>True</code> for any DM whenever <code>ALLOWED_GUILD_IDS</code> was unset,
-        letting anyone who could DM the bot run <code>/ask</code> outside any server with no restriction at
-        all - fixed by making the DM path its own explicit allowlist rather than falling out of the guild
-        check's default.</li>
-      <li>Long replies in a DM (no server, so no threads available) fall back to the same in-place chunked
-        messages used for short replies, instead of attempting thread creation.</li>
-      <li><code>/forget</code> takes no options and is DM-only (rejects with the same "not authorized"
-        style message as an unauthorized <code>/ask</code> if run in a server or by a user not in
-        <code>ALLOWED_DM_USER_IDS</code>), walks the entire DM channel history via
-        <code>interaction.channel.history(limit=None)</code>, and deletes every message authored by the bot.
-        Discord's bulk-delete/"purge" endpoint only works in guild text channels, not DMs, so each message is
-        deleted individually - discord.py's internal request queue throttles this automatically, so no manual
-        rate-limit handling is needed. Because a DM <code>/ask</code> already starts a fresh 1min.ai
-        conversation on every call (no threads means no persistent context in DMs to begin with), this command
-        is purely a visible-history wipe; there's no separate backend "memory" to clear alongside it.</li>
+      <li><code>/ask</code> is decorated with <code>@app_commands.guild_only()</code>, so Discord doesn't offer
+        it in DMs at all. An explicit <code>guild_id is None</code> check in <code>ask()</code> is the backstop, so
+        nobody can use up your 1min.ai credits by messaging the bot directly.</li>
     </ul>
     <div class="warning">
       Invite the bot with <code>Send Messages</code>, <code>Create Public Threads</code>,
@@ -452,10 +433,6 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     <div class="card">
       <h3>Example reply</h3>
       <img src="docs/ask-example.png" alt="Example /ask reply showing the question, answer, and tier/model footer" style="max-width:100%; border-radius:8px; border:1px solid var(--border);">
-    </div>
-    <div class="card">
-      <h3>DM rejection message</h3>
-      <img src="docs/dm-not-authorized.png" alt="Ephemeral 'You're not authorized to use this bot in DMs.' reply shown to users not in ALLOWED_DM_USER_IDS" style="max-width:100%; border-radius:8px; border:1px solid var(--border);">
     </div>
 
     <h2 id="configuration">7. Configuration (.env)</h2>
@@ -479,7 +456,6 @@ MODEL_CLASSIFIER=gpt-4o-mini
 
 DISCORD_BOT_TOKEN=your_discord_bot_token
 ALLOWED_GUILD_IDS=
-ALLOWED_DM_USER_IDS=
 DEV_GUILD_ID=
 
 ONEMIN_WATCH_WEBHOOK_URL=   # optional, monthly model check report - see section 9.1</pre>
@@ -576,15 +552,7 @@ crontab -e
         (e.g. ask it to expand on a specific point from the first reply).</li>
       <li>Post a message in a normal channel or in someone else's thread &rarr; confirm the bot stays silent
         (it should only respond inside threads it created itself).</li>
-      <li>DM the bot directly with <code>/ask</code> as a user <i>not</i> listed in
-        <code>ALLOWED_DM_USER_IDS</code> &rarr; confirm it replies with the "not authorized" message rather
-        than answering. Add that user's id to <code>ALLOWED_DM_USER_IDS</code>, restart the bot, and confirm
-        the same DM now works.</li>
-      <li>Run <code>/forget</code> in a normal server channel &rarr; confirm it's rejected with "This command
-        only works in DMs." rather than deleting anything.</li>
-      <li>DM the bot a few questions, then run <code>/forget</code> &rarr; confirm every message the bot sent
-        in that DM disappears and you get an ephemeral "Deleted N messages." confirmation, while your own
-        messages in the DM are left untouched.</li>
+      <li>Open a DM with the bot &rarr; confirm <code>/ask</code> isn't offered there.</li>
     </ol>
 
     <h2 id="troubleshooting">11. Troubleshooting</h2>
@@ -615,7 +583,7 @@ crontab -e
     </ul>
     <h3>Thread doesn't get created for a long reply</h3>
     <ul>
-      <li>Check <code>docker compose logs bot</code> for a <code>[tree error]</code> line right after the
+      <li>Check <code>docker compose logs bot</code> for an <code>[error]</code> line right after the
         teaser message posts - a <code>Forbidden</code> means the bot's role is missing
         <code>Create Public Threads</code> / <code>Send Messages in Threads</code> permissions in that
         server; grant them on the bot's role rather than re-inviting the bot.</li>
