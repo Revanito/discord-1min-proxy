@@ -168,7 +168,7 @@ within that provider. Chosen with cost in mind rather than always reaching for e
 
 | Tier | code (Anthropic) | specific (OpenAI) | general (xAI) |
 |---|---|---|---|
-| `easy` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | `gpt-5-mini` | `grok-4.3` |
+| `easy` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | `gpt-6-luna` | `grok-4.3` |
 | `medium` | `us.anthropic.claude-sonnet-4-6` | `gpt-5.4-mini` | `grok-4.5` |
 | `hard` | `us.anthropic.claude-opus-4-6-v1` | `gpt-5.2` | `grok-4.7` |
 

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     model_general_medium: str = "grok-4.5"
     model_general_hard: str = "grok-4.7"
 
-    model_specific_easy: str = "gpt-5-mini"
+    model_specific_easy: str = "gpt-6-luna"
     model_specific_medium: str = "gpt-5.4-mini"
     model_specific_hard: str = "gpt-5.2"
 
