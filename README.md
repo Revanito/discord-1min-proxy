@@ -70,6 +70,7 @@ docker compose logs -f
 | `ALLOWED_GUILD_IDS` | No | Comma-separated Discord server IDs to restrict the bot to; leave empty to allow any server it's invited to |
 | `ALLOWED_DM_USER_IDS` | No | Comma-separated Discord user IDs allowed to use `/ask` in a DM to the bot; leave empty to deny all DMs (the safe default) |
 | `DEV_GUILD_ID` | No | Your test server's ID, for instant slash-command sync while developing (global sync can take ~1 hour) |
+| `ONEMIN_WATCH_WEBHOOK_URL` | No | Discord webhook URL the monthly model check posts its report to (see [Monthly model check](#monthly-model-check)); not used by the bot itself |
 
 <sub>Full list of valid model identifiers in `MODELS.md`, parsed from
 [docs.1min.ai/docs/api/chat-with-ai-api](https://docs.1min.ai/docs/api/chat-with-ai-api).</sub>
@@ -101,6 +102,39 @@ back through a slow or unreachable upstream resolver (e.g. a local router/host r
 reaching a working one. `docker-compose.yml` already pins both services to `1.1.1.1` and `8.8.8.8` via the
 `dns:` key to avoid this — if you still see slow lookups after pulling the latest version, confirm that
 `dns:` block is present and rebuild (`docker compose up -d --build`).
+
+## Monthly model check
+
+1min.ai renames and removes model IDs without notice. In 2026 every Claude ID moved to `us.anthropic.*`
+and the `grok-4-fast-*` models were dropped, which broke every `/ask` until the IDs were updated.
+`scripts/check_models.py` catches this early. It reads the model IDs each project actually uses
+(`.env` first, then the `docker-compose.yml` defaults, then the `config.py` defaults) and checks them against
+1min.ai's public model list (`https://api.1min.ai/models?feature=UNIFY_CHAT_WITH_AI`, no API key needed).
+It then posts a report to a Discord webhook covering:
+- models that are missing or inactive
+- models due to be deprecated within 90 days
+- models added to or removed from 1min.ai's list since the last run
+
+It uses only the standard library, so it runs with the LXC's system `python3` (3.10+). There's no venv or
+pip step. To set it up on the LXC:
+
+```bash
+apt install -y python3                     # usually already there on Debian 12
+nano /opt/discord-1min-proxy/.env          # set ONEMIN_WATCH_WEBHOOK_URL=<your webhook URL>
+python3 /opt/discord-1min-proxy/scripts/check_models.py /opt/discord-1min-proxy   # first run, posts a report
+crontab -e                                 # then add the line below (09:00 on the 1st of each month)
+```
+
+```cron
+0 9 1 * * /usr/bin/python3 /opt/discord-1min-proxy/scripts/check_models.py /opt/discord-1min-proxy >> /var/log/onemin-model-check.log 2>&1
+```
+
+Add more project dirs to the same command to check sibling repos that use 1min.ai, e.g.
+`/opt/read-later`. A project on another LXC can't be read from here, so run the script on that LXC as
+well. Use `--dry-run` to print the report without posting it or saving state. The exit code is 0 when
+everything is fine, 1 when a model is broken, and 2 when the 1min.ai API can't be reached. When the
+script reports a change, update the IDs in `config.py`, `docker-compose.yml`, `.env.example` and the docs,
+plus the LXC's `.env` if it overrides them, then refresh `MODELS.md`.
 
 ## Stopping / updating
 

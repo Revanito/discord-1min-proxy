@@ -2,3 +2,5 @@
 proxy/data/
 __pycache__/
 *.pyc
+# model watchdog state (scripts/check_models.py)
+scripts/.known_models.json

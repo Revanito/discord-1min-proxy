@@ -251,7 +251,7 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     <pre>{
   "type": "UNIFY_CHAT_WITH_AI",
   "title": "some-conversation-key",
-  "model": "grok-4-fast-reasoning"
+  "model": "grok-4.5"
 }</pre>
     <p>Example chat request body:</p>
     <pre>{
@@ -293,7 +293,10 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     requirements.txt
     bot.py                    # discord.py client
     config.py                 # settings loaded from environment
-    thread_conversations.py   # discord thread id -> interaction_id, persisted to data/thread_conversations.json</pre>
+    thread_conversations.py   # discord thread id -> interaction_id, persisted to data/thread_conversations.json
+  scripts/
+    check_models.py   # monthly 1min.ai model check (cron on the LXC host, stdlib only) - see section 9.1
+  MODELS.md           # every model ID 1min.ai accepts + why each routing cell uses what it uses</pre>
 
     <h2 id="proxy">5. FastAPI proxy</h2>
     <p><code>POST /v1/chat</code> is the only endpoint the bot calls.</p>
@@ -460,13 +463,13 @@ Discord bot (discord.py) ----HTTP + X-Proxy-Key----> FastAPI proxy ----API-KEY--
     <pre>ONE_MIN_API_KEY=your_1min_ai_api_key
 PROXY_SHARED_SECRET=choose_a_long_random_string
 
-MODEL_CODE_EASY=claude-haiku-4-5-20251001
-MODEL_CODE_MEDIUM=claude-sonnet-4-6
-MODEL_CODE_HARD=claude-opus-4-6
+MODEL_CODE_EASY=us.anthropic.claude-haiku-4-5-20251001-v1:0
+MODEL_CODE_MEDIUM=us.anthropic.claude-sonnet-4-6
+MODEL_CODE_HARD=us.anthropic.claude-opus-4-6-v1
 
-MODEL_GENERAL_EASY=grok-4-fast-non-reasoning
-MODEL_GENERAL_MEDIUM=grok-4-fast-reasoning
-MODEL_GENERAL_HARD=grok-4.5
+MODEL_GENERAL_EASY=grok-4.3
+MODEL_GENERAL_MEDIUM=grok-4.5
+MODEL_GENERAL_HARD=grok-4.7
 
 MODEL_SPECIFIC_EASY=gpt-5-mini
 MODEL_SPECIFIC_MEDIUM=gpt-5.4-mini
@@ -477,7 +480,9 @@ MODEL_CLASSIFIER=gpt-4o-mini
 DISCORD_BOT_TOKEN=your_discord_bot_token
 ALLOWED_GUILD_IDS=
 ALLOWED_DM_USER_IDS=
-DEV_GUILD_ID=</pre>
+DEV_GUILD_ID=
+
+ONEMIN_WATCH_WEBHOOK_URL=   # optional, monthly model check report - see section 9.1</pre>
     <div class="note">
       Category picks the provider - <code>code</code> (programming/IT) goes to Anthropic, <code>specific</code>
       (factual/knowledge questions) goes to OpenAI, and <code>general</code> (casual/creative) goes to xAI,
@@ -523,6 +528,31 @@ cp .env.example .env
 nano .env   # fill in real values
 docker compose up -d --build
 docker compose logs -f</pre>
+
+    <h3 id="model-check">9.1 Monthly model check</h3>
+    <p>1min.ai renames and removes model IDs without notice. In 2026 every Claude ID moved to
+      <code>us.anthropic.*</code> and the <code>grok-4-fast-*</code> models were dropped, which broke every
+      <code>/ask</code> until the IDs were updated. <code>scripts/check_models.py</code> catches this early. It
+      reads the model IDs each project actually uses (<code>.env</code> first, then the
+      <code>docker-compose.yml</code> defaults, then the <code>config.py</code> defaults) and checks them against
+      1min.ai's public model list. It then posts a report to the Discord webhook in
+      <code>ONEMIN_WATCH_WEBHOOK_URL</code> covering:</p>
+    <ul>
+      <li>models that are missing or inactive</li>
+      <li>models due to be deprecated within 90 days</li>
+      <li>models added to or removed from 1min.ai's list since the last run</li>
+    </ul>
+    <p>The public model list is at <code>https://api.1min.ai/models?feature=UNIFY_CHAT_WITH_AI</code> and needs
+      no API key. The script uses only the standard library and runs from the LXC host's cron with the system
+      <code>python3</code>, not inside a container:</p>
+    <pre>apt install -y python3
+python3 /opt/discord-1min-proxy/scripts/check_models.py /opt/discord-1min-proxy --dry-run   # print only
+crontab -e
+# 09:00 on the 1st of each month:
+0 9 1 * * /usr/bin/python3 /opt/discord-1min-proxy/scripts/check_models.py /opt/discord-1min-proxy &gt;&gt; /var/log/onemin-model-check.log 2&gt;&amp;1</pre>
+    <p>Pass more project dirs to check sibling repos that use 1min.ai. A project on a different LXC needs its
+      own cron entry there. The exit code is 0 when everything is fine, 1 when a model is broken, and 2 when
+      the 1min.ai API can't be reached.</p>
 
     <h2 id="testing">10. Testing procedure</h2>
     <ol>
@@ -601,6 +631,11 @@ docker compose logs -f</pre>
       <li>If the underlying error is <code>400 REQUEST_BODY_VALIDATION_FAILED</code> from
         <code>/api/conversations</code>, the create-conversation call is missing a required field - see the
         warning in <a href="#onemin-api">section 3</a>.</li>
+      <li>If every <code>/ask</code> fails at once, a configured model ID was probably renamed or removed by
+        1min.ai. The conversation is created with <code>MODEL_GENERAL_MEDIUM</code>, so a bad ID there breaks
+        every category, not just the general one. Run
+        <code>python3 scripts/check_models.py /opt/discord-1min-proxy --dry-run</code> to see which IDs are
+        affected (<a href="#model-check">section 9.1</a>).</li>
     </ul>
     <h3>Docker fails to start inside the LXC</h3>
     <ul>
