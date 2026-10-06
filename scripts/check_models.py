@@ -55,8 +55,13 @@ def read_text(path: Path) -> str:
         return ""
 
 
-def collect_models(project: Path) -> dict[str, str]:
-    """Return {MODEL_VAR: model_id} with the same precedence the app uses at runtime."""
+def collect_models(project: Path) -> tuple[dict[str, str], list[str]]:
+    """Return ({MODEL_VAR: model_id}, [unused .env vars]) with the same precedence the app uses at runtime.
+
+    A .env MODEL_* var only counts if config.py or docker-compose.yml actually reads it - leftovers from an
+    older config (e.g. the pre-category MODEL_EASY/MEDIUM/HARD) never reach the app, so they're reported as
+    unused instead of as broken.
+    """
     found: dict[str, str] = {}
     for config in project.rglob("config.py"):
         if SKIP_DIRS.isdisjoint(config.parts):
@@ -65,9 +70,13 @@ def collect_models(project: Path) -> dict[str, str]:
                     found[name.upper()] = value
     for name, value in COMPOSE_RE.findall(read_text(project / "docker-compose.yml")):
         found[name] = value.strip()
+    unused = []
     for name, value in ENV_RE.findall(read_text(project / ".env")):
-        found[name] = value
-    return found
+        if name in found:
+            found[name] = value
+        else:
+            unused.append(name)
+    return found, unused
 
 
 def read_env_var(project: Path, name: str) -> str | None:
@@ -112,12 +121,15 @@ def main() -> int:
 
     by_id = {m["modelId"]: m for m in live}
     now = datetime.now(timezone.utc)
-    broken, warnings, ok = [], [], []
+    broken, warnings, notes, ok = [], [], [], []
 
     for project in args.projects:
-        models = collect_models(project)
+        models, unused = collect_models(project)
         if not models:
             warnings.append(f"`{project.name}`: no MODEL_* settings found - wrong path?")
+        if unused:
+            notes.append(f"ℹ️ `{project.name}` .env has unused leftovers (not read by the app, safe to delete): "
+                         + ", ".join(unused))
         for var, model_id in sorted(models.items()):
             where = f"`{project.name}` {var} = `{model_id}`"
             info = by_id.get(model_id)
@@ -144,7 +156,7 @@ def main() -> int:
 
     status = "❌ action needed" if broken else ("⚠️ heads-up" if warnings else "✅ all good")
     lines = [f"**1min.ai monthly model check - {status}** ({len(live)} models live, {len(ok) + len(warnings) + len(broken)} checked)"]
-    lines += broken + warnings
+    lines += broken + warnings + notes
     if previous is None and not args.dry_run:
         lines.append("_First run - saved the model list, next month's report will show what changed._")
     if removed:
